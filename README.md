@@ -14,8 +14,6 @@ The agent performs the following actions:
     *   If the user remains unsatisfied after 3 automated attempts:
     *   The system assigns the ticket to a human IT agent, providing AI-generated suggestions to assist them.
 
-![Agent Workflow Diagram](images/workflow_diagram.png)
-
 ## Roadmap & Milestones
 
 1.  **Data Migration (Confluence to GLPI)**
