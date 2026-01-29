@@ -1,0 +1,40 @@
+import requests
+import re
+
+# Config from your browser session
+# Update this with the CURRENT session cookie from your browser if it changed
+COOKIE_NAME = "glpi_session_cookie_name"
+COOKIE_VALUE = "your_session_cookie_value" 
+
+# Or better, just paste the RAW Cookie header string from your browser network tab for any request
+# Example: "glpi_c23...=t0l7...; other_cookie=..."
+RAW_COOKIE = f"{COOKIE_NAME}={COOKIE_VALUE}"
+
+BASE_URL = "https://your-glpi-instance"
+
+# Log files to fetch
+LOG_FILES = ["php-errors.log", "api.log", "access-errors.log", "event.log"]
+
+def fetch_log(filename):
+    print(f"Fetching {filename}...")
+    list_url = f"{BASE_URL}/front/logs.php"
+    
+    headers = {
+        "Cookie": RAW_COOKIE,
+        "User-Agent": "your_user_agent"
+    }
+
+    try:
+        resp = requests.get(list_url, headers=headers, verify=False)
+        if resp.status_code != 200:
+            print(f"Failed to access logs page. Status: {resp.status_code}")
+            return
+
+        if filename in resp.text:
+            print(f"Found {filename} in page.")
+            pass
+        
+    except Exception as e:
+        print(f"Error: {e}")
+
+pass
