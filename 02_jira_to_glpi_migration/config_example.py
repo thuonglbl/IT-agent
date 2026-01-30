@@ -1,28 +1,28 @@
 # Jira Configuration
 # URL of your Jira Server
-JIRA_URL = "https://your-jira-server/jira"
+JIRA_URL = "your-jira-url/jira"
 # Your Personal Access Token (PAT)
-JIRA_PAT = "YOUR_JIRA_PAT_HERE"
+JIRA_PAT = "your-jira-pat"
 # Project Key to migrate
-JIRA_PROJECT_KEY = "YOUR_PROJECT_KEY"
-
-# GLPI Configuration
-GLPI_URL = "https://your-glpi-instance/api.php/v1"
-GLPI_APP_TOKEN = "YOUR_GLPI_APP_TOKEN"
-GLPI_USER_TOKEN = "YOUR_GLPI_USER_TOKEN"
-
+JIRA_PROJECT_KEY = "your-jira-project-key"
 # SSL Verification
 # Options:
 # - False: Disable verification (insecure, prints warnings)
 # - True: Verify using default system CAs
 # - "path/to/cert.pem": Verify using specific CA bundle
-
-# Path to Jira Certificate (or True/False)
 JIRA_VERIFY_SSL = True
 
-# Path to GLPI Certificate (or True/False)
-GLPI_VERIFY_SSL = True
+# GLPI Configuration
+GLPI_URL = "your-glpi-url/api.php/v1"
+GLPI_APP_TOKEN = "your-glpi-app-token"
+GLPI_USER_TOKEN = "your-glpi-user-token"
+# SSL Verification
+# Options:
+# - False: Disable verification (insecure, prints warnings)
+# - True: Verify using default system CAs
+# - "path/to/cert.pem": Verify using specific CA bundle
+GLPI_VERIFY_SSL = r"path/to/your/cert.pem"
 
 # Migration Settings
 BATCH_SIZE = 50 # Number of tickets to fetch per request (Safe default)
-STATE_FILE = "migration_state.json" # to resume if the script is interrupted
+STATE_FILE = "migration_state.json" # to resume if the script is interrupted (lost internet, server down, etc)

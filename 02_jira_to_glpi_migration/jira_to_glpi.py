@@ -7,6 +7,7 @@ from jira_client import JiraClient
 from glpi_api import GlpiClient
 
 # --- Constants ---
+DEBUG = True # Set to False for production migration
 STATE_FILE = config.STATE_FILE
 
 def load_state():
@@ -66,17 +67,19 @@ def main():
         print(f"Resuming from: {start_at}")
 
         while start_at < total_issues:
-            # DEBUG: Force single batch of 1
-            print(f"\n[DEBUG] Fetching 1 ticket for testing...")
+            # Determine max results based on Debug mode
+            fetch_limit = 1 if DEBUG else config.BATCH_SIZE
             
-            issues, _ = jira.search_issues(jql, start_at=start_at, max_results=1)
+            if DEBUG:
+                print(f"\n[DEBUG] Fetching 1 ticket for testing...")
+            else:
+                print(f"\nFetching batch: {start_at} to {start_at + fetch_limit} ...")
+            
+            issues, _ = jira.search_issues(jql, start_at=start_at, max_results=fetch_limit)
             
             if not issues:
                 print("No more issues returned.")
                 break
-
-            # Force break after this batch to ensure only 1 ticket is processed
-            should_break_loop = True
                 
             for issue in issues:
                 key = issue.get('key')
@@ -158,9 +161,9 @@ def main():
             start_at += len(issues)
             save_state(start_at, total_processed)
 
-            # DEBUG MODE
-            if should_break_loop:
-                print("[DEBUG] Stopping after 1 ticket.")
+            # DEBUG MODE: Stop after 1 batch (which is 1 ticket)
+            if DEBUG:
+                print("[DEBUG] Stopping after test batch.")
                 break
             
         print("\nMigration Completed Successfully!")

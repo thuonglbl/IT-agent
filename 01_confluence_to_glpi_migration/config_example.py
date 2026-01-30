@@ -13,7 +13,7 @@ EXPORT_DIR = r"C:\path\to\your\confluence\export"
 # - False: Disable verification (insecure, prints warnings)
 # - True: Verify using default system CAs
 # - "path/to/cert.pem": Verify using specific CA bundle
-VERIFY_SSL = True
+VERIFY_SSL = r"C:\path\to\your\cert.pem"
 
 # Cleanup Settings
 DEFAULT_CATEGORY_TO_CLEANUP = "your_glpi_root_category_name"

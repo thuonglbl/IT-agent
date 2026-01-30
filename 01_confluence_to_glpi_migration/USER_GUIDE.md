@@ -62,7 +62,7 @@ You need an **App-Token** and a **User-Token** from GLPI.
 5.  **User-Token**: Go to **User Preference** (top right user icon) > **My Settings**. In Main tab, Passwords and access keys part, tick **Regenerate** and click **Save** to get your personal User-Token.
 
 ### Update `config.py`
-Open `config.py` in a text editor and update the variables with the values you obtained above:
+Open `config_example.py` in a text editor and update the variables with the values you obtained above then rename to `config.py`:
 *   **GLPI_URL**: Paste the **Legacy API URL** (from Step 3).
 *   **APP_TOKEN**: Paste the **App-Token** (from Step 4).
 *   **USER_TOKEN**: Paste the **User-Token** (from Step 5).

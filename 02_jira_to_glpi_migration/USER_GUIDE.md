@@ -31,6 +31,9 @@ Open a Command Prompt or Terminal in the project folder and run:
 pip install -r requirements.txt
 ```
 
+### GLPI Configuration (API & Tokens)
+Refer to USER_GUIDE.md in 01_confluence_to_glpi_migration folder for detailed instructions.
+
 ### Jira Configuration (PAT)
 You need a **Personal Access Token (PAT)** from your Jira Server.
 1.  Log in to Jira.
@@ -40,26 +43,13 @@ You need a **Personal Access Token (PAT)** from your Jira Server.
 5.  Give it a name and set Expiry date.
 6.  **Copy the token** and save in safe place since you won't be able to see it again.
 
-### GLPI Configuration (API & Tokens)
-Refer to USER_GUIDE.md in 01_confluence_to_glpi_migration folder for detailed instructions.
-
-## 3. Configuration
-Open `config.py` in a text editor and update the variables:
-
 ### Jira Settings
 *   **JIRA_URL**: Your Jira URL in browser, including  '/jira' at the end.
 *   **JIRA_PAT**: Paste your Personal Access Token here.
 *   **JIRA_PROJECT_KEY**: The Key of the Project you want to migrate (look at the url in browser, it is the part after '/projects/').
 
-### GLPI Settings
-*   **GLPI_URL**: Paste the **Legacy API URL**.
-*   **GLPI_APP_TOKEN**: Paste the **App-Token**.
-*   **GLPI_USER_TOKEN**: Paste the **User-Token**.
-*   **GLPI_USER_TOKEN**: Paste the **User-Token**.
-*   **JIRA_VERIFY_SSL** & **GLPI_VERIFY_SSL**:
-    *   Set to `True` (default) if using public HTTPS.
-    *   Set to path of `.pem` file if using internal servers with self-signed certs.
-    *   Set to `False` ONLY for testing (insecure).
+## 3. Configuration
+Open `config_example.py` in a text editor and update the variables with the values you obtained above then rename to `config.py`:
 
 ### Migration Settings
 *   **BATCH_SIZE**: Default is `50`. Adjust if you want to fetch more/less tickets per request.
