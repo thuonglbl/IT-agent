@@ -66,13 +66,17 @@ def main():
         print(f"Resuming from: {start_at}")
 
         while start_at < total_issues:
-            print(f"\nFetching batch: {start_at} to {start_at + config.BATCH_SIZE} ...")
+            # DEBUG: Force single batch of 1
+            print(f"\n[DEBUG] Fetching 1 ticket for testing...")
             
-            issues, _ = jira.search_issues(jql, start_at=start_at, max_results=config.BATCH_SIZE)
+            issues, _ = jira.search_issues(jql, start_at=start_at, max_results=1)
             
             if not issues:
                 print("No more issues returned.")
                 break
+
+            # Force break after this batch to ensure only 1 ticket is processed
+            should_break_loop = True
                 
             for issue in issues:
                 key = issue.get('key')
@@ -153,6 +157,11 @@ def main():
             # Update Batch Progress
             start_at += len(issues)
             save_state(start_at, total_processed)
+
+            # DEBUG MODE
+            if should_break_loop:
+                print("[DEBUG] Stopping after 1 ticket.")
+                break
             
         print("\nMigration Completed Successfully!")
         
