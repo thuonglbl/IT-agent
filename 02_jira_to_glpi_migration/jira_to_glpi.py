@@ -34,7 +34,7 @@ def main():
     print("--- Jira to GLPI Migration Tool (API Mode) ---")
     
     # 1. Initialize Clients
-    jira = JiraClient(config.JIRA_URL, config.JIRA_PAT)
+    jira = JiraClient(config.JIRA_URL, config.JIRA_PAT, verify_ssl=config.JIRA_VERIFY_SSL)
     glpi = GlpiClient(config.GLPI_URL, config.GLPI_APP_TOKEN, config.GLPI_USER_TOKEN, verify_ssl=config.GLPI_VERIFY_SSL)
     
     # Verify Connections

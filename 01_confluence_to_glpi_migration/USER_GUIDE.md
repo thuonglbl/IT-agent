@@ -60,11 +60,6 @@ You need an **App-Token** and a **User-Token** from GLPI.
     *   **IPv4 address range**: Remove all values (leave empty) to bypass IP restrictions.
     *   **App-Token**: Locate the **Application Token(app_token)** field. Click the **Regenerate** button if needed, and copy the token value.
 5.  **User-Token**: Go to **User Preference** (top right user icon) > **My Settings**. In Main tab, Passwords and access keys part, tick **Regenerate** and click **Save** to get your personal User-Token.
-6.  **Test Connection**:
-    *   Open `test_curl.cmd` in a text editor.
-    *   Replace the values for `GLPI_API_URL`, `APP_TOKEN` and `USER_TOKEN` with your generated tokens.
-    *   Run the script: `.\test_curl.cmd`.
-    *   If successful, you should see a session token or a 200 OK response.
 
 ### Update `config.py`
 Open `config.py` in a text editor and update the variables with the values you obtained above:
@@ -79,6 +74,12 @@ Open `config.py` in a text editor and update the variables with the values you o
 
 ## 4. Running the Migration
 
+### Test Connection (Recommended)
+Before running the main migration, ensure your `config.py` is correct:
+1.  Run the script: `python test_curl.py`.
+2.  If successful, you should see a session token or a 200 OK response.
+
+### Run Migration
 Run the following command:
 ```bash
 python main.py

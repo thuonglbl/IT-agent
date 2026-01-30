@@ -55,8 +55,10 @@ Open `config.py` in a text editor and update the variables:
 *   **GLPI_URL**: Paste the **Legacy API URL**.
 *   **GLPI_APP_TOKEN**: Paste the **App-Token**.
 *   **GLPI_USER_TOKEN**: Paste the **User-Token**.
-*   **VERIFY_SSL**:
-    *   Set to `True` (default) or path to `.pem` file if you have SSL issues (ask your GLPI administrator to provide the .pem file).
+*   **GLPI_USER_TOKEN**: Paste the **User-Token**.
+*   **JIRA_VERIFY_SSL** & **GLPI_VERIFY_SSL**:
+    *   Set to `True` (default) if using public HTTPS.
+    *   Set to path of `.pem` file if using internal servers with self-signed certs.
     *   Set to `False` ONLY for testing (insecure).
 
 ### Migration Settings

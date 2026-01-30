@@ -3,7 +3,7 @@ import config
 import re
 from glpi_api import GlpiClient
 
-jls_extract_var = "your_glpi_root_category_name"
+jls_extract_var = config.DEFAULT_CATEGORY_TO_CLEANUP
 def cleanup_category(category_name=jls_extract_var):
 
     print(f"--- Cleanup Script: Deleting items in '{category_name}' ---")
