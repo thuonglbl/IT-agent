@@ -23,7 +23,12 @@ class JiraClient:
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": ["summary", "description", "created", "status", "comment", "attachment", "reporter", "priority"] # Add more fields if needed
+            "fields": [
+                "summary", "description", "created", "status", 
+                "comment", "attachment", "reporter", "priority",
+                "assignee", "fixVersions", "components", "environment", "resolution"
+            ],
+            "expand": "changelog"
         }
         
         try:

@@ -138,18 +138,24 @@ class GlpiClient:
                 print(e.response.text)
             return None
 
-    def create_ticket(self, name, content, project_id=None):
-        """Create a Ticket."""
+    def create_ticket(self, name, content, project_id=None, **kwargs):
+        """
+        Create a Ticket.
+        kwargs can include: date, status, _users_id_requester, _users_id_assign, etc.
+        """
         endpoint = f"{self.url}/Ticket"
         payload = {
             "input": {
                 "name": name,
                 "content": content,
-                # "project_id": project_id  # If using Project plugin or field
             }
         }
         if project_id:
             payload['input']['project_id'] = project_id
+            
+        # Merge optional fields
+        if kwargs:
+            payload['input'].update(kwargs)
 
         try:
             response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
@@ -187,13 +193,22 @@ class GlpiClient:
 
     def add_ticket_followup(self, ticket_id, content):
         """Add a comment (Followup) to a ticket."""
-        endpoint = f"{self.url}/Ticket/{ticket_id}/ITILFollowup"
+    def add_ticket_followup(self, ticket_id, content, **kwargs):
+        """
+        Add a comment (Followup) to a ticket.
+        kwargs: users_id (author), is_private, etc.
+        """
+        endpoint = f"{self.url}/ITILFollowup"
         payload = {
             "input": {
-                "tickets_id": ticket_id,
+                "items_id": ticket_id,
+                "itemtype": "Ticket",
                 "content": content
             }
         }
+        if kwargs:
+            payload['input'].update(kwargs)
+            
         try:
             response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
             response.raise_for_status()
@@ -387,6 +402,110 @@ class GlpiClient:
                 break
                 
         return current_parent_id
+
+    def get_user_id_by_name(self, username):
+        """
+        Find a GLPI User ID by their login name (Visa).
+        Returns ID or None.
+        """
+        endpoint = f"{self.url}/User"
+        params = {
+             "is_deleted": 0,
+             "searchText": username, # Matches 'name' (login) or 'realname' etc.
+             "range": "0-10" 
+        }
+        
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    for user in data:
+                        # Strict check on 'name' (login)
+                        if user.get("name") == username:
+                            return user.get("id")
+        except Exception as e:
+            print(f"Error searching user {username}: {e}")
+            
+        return None
+
+    def get_project_id_by_name(self, name):
+        """Find Project ID by name."""
+        endpoint = f"{self.url}/Project"
+        params = {
+             "is_deleted": 0,
+             "searchText": name, 
+             "range": "0-10" 
+        }
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    for item in data:
+                        if item.get("name") == name:
+                            return item.get("id")
+        except Exception as e:
+            print(f"Error searching project {name}: {e}")
+        return None
+
+    def create_project_task(self, project_id, name, content, **kwargs):
+        """
+        Create a Task inside a Project.
+        kwargs: users_id_tech (assignee), percent_done, plan_start_date, etc.
+        """
+        endpoint = f"{self.url}/ProjectTask"
+        payload = {
+            "input": {
+                "projects_id": project_id,
+                "name": name,
+                "content": content,
+                # Default values suitable for migration
+                "percent_done": 0,
+            }
+        }
+        
+        # Merge optional fields (e.g. date, status, users_id)
+        if kwargs:
+            payload['input'].update(kwargs)
+
+        try:
+            response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            response.raise_for_status()
+            result = response.json()
+            print(f"Created ProjectTask '{name}': ID {result.get('id')}")
+            return result.get('id')
+        except Exception as e:
+            print(f"Failed to create ProjectTask '{name}': {e}")
+            if hasattr(e, 'response') and e.response:
+                print(e.response.text)
+            return None
+
+    def create_note(self, itemtype, items_id, content, **kwargs):
+        """
+        Create a Note (Notepad) for an item.
+        Used for ProjectTasks, Computers, etc.
+        """
+        endpoint = f"{self.url}/Note"
+        payload = {
+            "input": {
+                "itemtype": itemtype,
+                "items_id": items_id,
+                "content": content
+            }
+        }
+        if kwargs:
+            payload['input'].update(kwargs)
+
+        try:
+            response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            print(f"Failed to add Note to {itemtype} {items_id}: {e}")
+            if hasattr(e, 'response') and e.response:
+                print(e.response.text)
+            return False
 
 if __name__ == "__main__":
     # Test stub
