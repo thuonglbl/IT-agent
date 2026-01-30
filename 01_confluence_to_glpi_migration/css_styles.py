@@ -1,5 +1,5 @@
 # CSS to mimic Confluence layout in GLPI
-# We inject this into every KB article to ensure tables and headers look correct.
+# Inject this into every KB article to ensure tables and headers look correct.
 
 CONFLUENCE_CSS = """
 <style>
