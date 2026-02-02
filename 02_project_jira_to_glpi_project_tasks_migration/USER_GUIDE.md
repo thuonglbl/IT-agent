@@ -53,6 +53,23 @@ Open `config_example.py` in a text editor and update the variables with the valu
 
 ### Migration Settings
 *   **BATCH_SIZE**: Default is `50`. Adjust if you want to fetch more/less tickets per request.
+*   **STATE_FILE**: Default is "migration_state.json". This file is used to resume if the script is interrupted (lost internet, server down, etc). To start from the beginning, delete this file.
+
+### Dynamic Status Mapping (Project Tasks)
+
+#### Identify Jira Statuses
+Check your Jira project for all possible statuses, for example
+
+![Jira Status](../images/jira_status.png)
+
+#### Configure GLPI Project States
+The script will look for a **GLPI Project Task > State** with the **exact same name** as the Jira Status.
+
+1.  Log in to GLPI.
+2.  Go to **Tools** > **Projects** > select your project > **Project** tab.
+3.  In the **States** section, click on **+** or **i** icon to add/edit/delete states, ensuring all Jira statuses are mapped, no missing, no redundant.
+
+![GLPI State](../images/glpi_state.png)
 
 ## 4. Running the Migration
 

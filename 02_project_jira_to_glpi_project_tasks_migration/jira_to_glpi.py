@@ -8,7 +8,10 @@ from jira_client import JiraClient
 from glpi_api import GlpiClient
 
 # --- Constants ---
-DEBUG = True # Set to False for production migration
+# Debug Mode
+# Set to True to fetch only 1 ticket and print detailed debug info
+# Set to False to run the full migration
+DEBUG = True
 STATE_FILE = config.STATE_FILE
 
 def load_state():
@@ -156,6 +159,11 @@ def main():
             return
         print(f"-> Found Project ID: {project_id}")
 
+        # Fetch Project States (Dynamic Mapping)
+        print("Fetching GLPI Project States...")
+        project_states_map = glpi.get_project_states()
+        print(f"-> Loaded {len(project_states_map)} states: {project_states_map}")
+        
     except Exception as e:
         print(f"Connection Failed: {e}")
         return
@@ -206,11 +214,21 @@ def main():
                     if assignee_id:
                         print(f"    -> Mapped Assignee '{jira_assignee_name}' to GLPI ID {assignee_id}")
 
-                # Status Mapping
+                # Status Mapping (Dynamic & Case-Insensitive)
                 jira_status = fields.get('status', {}).get('name', 'Open')
-                glpi_state = 1
-                if jira_status in ['In Progress']: glpi_state = 2
-                if jira_status in ['Resolved', 'Closed']: glpi_state = 3 
+                jira_status_lower = jira_status.lower()
+                glpi_state_id = project_states_map.get(jira_status_lower)
+                
+                if not glpi_state_id:
+                    # Fallback logic if exact name match fails
+                    if jira_status_lower in ['in progress', 'reopened'] and 'processing' in project_states_map:
+                         glpi_state_id = project_states_map['processing']
+                    elif jira_status_lower in ['resolved'] and 'closed' in project_states_map:
+                         glpi_state_id = project_states_map['closed']
+                    else:
+                         # Default to 'new' (if exists) or ID 1
+                         glpi_state_id = project_states_map.get('new', 1) 
+                         print(f"    [WARN] Status '{jira_status}' not found in GLPI. Defaulting to ID {glpi_state_id}")
                 
                 # Date Mapping
                 jira_created = fields.get('created')
@@ -252,8 +270,8 @@ def main():
                 print(f"    -> Creating GLPI Project Task '{task_name}'...")
                 
                 task_kwargs = {
-                    "state": glpi_state,
-                    "percent_done": 100 if glpi_state == 3 else 0
+                    "projectstates_id": glpi_state_id,
+                    "percent_done": 100 if jira_status in ['Resolved', 'Closed'] else 0
                 }
                 if glpi_date:
                     task_kwargs['date'] = glpi_date
@@ -267,35 +285,52 @@ def main():
                 if task_id:
                     print(f"       Success! Project Task ID: {task_id}")
                     
-                    # 7a. Migrate Comments (AS NOTES)
+                    # 7. Migrate Comments & History (with Fallback)
+                    failed_notes = []
+                    
+                    # 7a. Comments - Use create_note directly (GLPI creates Notes despite returning 400/500)
                     comments = fields.get('comment', {}).get('comments', [])
                     if comments:
-                        print(f"       Migrating {len(comments)} comments...")
+                        print(f"       Migrating {len(comments)} comments as Notes...")
                         for comment in comments:
                             author_login = comment.get('author', {}).get('name') 
                             body = comment.get('body', '')
                             created = comment.get('created')
+                            display_name = comment.get('author', {}).get('displayName') or author_login
                             
                             comment_author_id = None
                             if author_login:
                                 comment_author_id = glpi.get_user_id_by_name(author_login)
                             
-                            # Build Note Content
-                            note_html = f"<p><b>[Comment by {comment.get('author', {}).get('displayName')} on {created}]</b></p>"
+                            # Build Note content (HTML)
+                            note_html = f"<p><b>[Comment by {display_name} on {created}]</b></p>"
                             note_html += f"<div>{body.replace(chr(10), '<br>')}</div>"
                             
-                            # Use create_note instead of ITILFollowup
-                            kwargs_note = {}
-                            if comment_author_id:
-                                kwargs_note['users_id'] = comment_author_id
-                                
-                            glpi.create_note("ProjectTask", task_id, note_html, **kwargs_note)
+                            kw = {}
+                            if comment_author_id: 
+                                kw['users_id'] = comment_author_id
+
+                            # Create Note - will succeed despite GLPI returning 400/500
+                            glpi.create_note("ProjectTask", task_id, note_html, **kw)
                             
-                    # 7b. Migrate History (AS NOTE)
+                    # 7b. History
                     history_html = process_changelog(issue)
                     if history_html:
                         print("       Migrating History Log...")
-                        glpi.create_note("ProjectTask", task_id, history_html)
+                        if not glpi.create_note("ProjectTask", task_id, history_html):
+                             print("          -> History Note creation failed. Queueing for description append.")
+                             failed_notes.append(history_html)
+                             
+                    # 7c. Fallback Append
+                    if failed_notes:
+                        print(f"       Appending {len(failed_notes)} failed notes to Description...")
+                        append_html = "<hr><h3>Migrated Comments & History</h3>"
+                        append_html += "<hr>".join(failed_notes)
+                        
+                        # Append to original content
+                        final_content = content_html + append_html
+                        
+                        glpi.update_project_task(task_id, content=final_content)
 
                 else:
                     print(f"       Failed to create task for {key}")

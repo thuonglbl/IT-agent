@@ -1,10 +1,10 @@
 # Jira Configuration
 # URL of your Jira Server
-JIRA_URL = "your-jira-url/jira"
+JIRA_URL = "https://your-jira-server/jira"
 # Your Personal Access Token (PAT)
 JIRA_PAT = "your-jira-pat"
 # Project Key to migrate
-JIRA_PROJECT_KEY = "your-jira-project-key"
+JIRA_PROJECT_KEY = "PROJECTKEY"
 # SSL Verification
 # Options:
 # - False: Disable verification (insecure, prints warnings)
@@ -13,9 +13,11 @@ JIRA_PROJECT_KEY = "your-jira-project-key"
 JIRA_VERIFY_SSL = True
 
 # GLPI Configuration
-GLPI_URL = "your-glpi-url/api.php/v1"
-GLPI_APP_TOKEN = "your-glpi-app-token"
-GLPI_USER_TOKEN = "your-glpi-user-token"
+GLPI_URL = "https://your-glpi-server/api.php/v1"
+# GLPI Target Project Name (Must match exactly or be found via search)
+GLPI_PROJECT_NAME = "Target GLPI Project Name"
+GLPI_APP_TOKEN = "your-app-token"
+GLPI_USER_TOKEN = "your-user-token"
 # SSL Verification
 # Options:
 # - False: Disable verification (insecure, prints warnings)

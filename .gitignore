@@ -20,5 +20,3 @@ config.py
 
 # Migration State
 migration_state.json
-images/workflow_diagram.png
-README.md
