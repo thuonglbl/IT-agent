@@ -2,10 +2,12 @@ import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+import config
+
 # Config
-BASE_URL = "https://your-glpi-instance"
-APP_TOKEN = "YOUR_APP_TOKEN"
-USER_TOKEN = "YOUR_USER_TOKEN"
+BASE_URL = config.GLPI_URL
+APP_TOKEN = config.APP_TOKEN
+USER_TOKEN = config.USER_TOKEN
 
 endpoints = [
     "/api.php/v2.1/initSession",
@@ -26,7 +28,9 @@ for ep in endpoints:
     url = BASE_URL + ep
     print(f"\n--- Testing: {url} ---")
     try:
-        response = requests.get(url, headers=headers, verify=False, timeout=5)
+        # Use verify setting from config
+        ssl_verify = config.VERIFY_SSL
+        response = requests.get(url, headers=headers, verify=ssl_verify, timeout=5)
         print(f"Status: {response.status_code}")
         print(f"Content-Type: {response.headers.get('Content-Type', 'Unknown')}")
         

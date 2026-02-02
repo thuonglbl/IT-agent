@@ -1,7 +1,9 @@
 # IT Agent System
 
 ## Project Objective
-The goal is to create an intelligent agent system that automatically triggers when an IT ticket is created or updated in GLPI.
+1. Migrate data from Atlassian to GLPI
+Reason: GLPI has a free community version on premise, no more license costs for Atlassian Confluence and Jira, but no migration tool.
+2. The final goal is to create an intelligent agent system that automatically triggers when an IT ticket is created or updated in GLPI.
 
 The agent performs the following actions:
 1.  **Analyze**: Reads the content of the GLPI ticket.
@@ -14,21 +16,20 @@ The agent performs the following actions:
     *   If the user remains unsatisfied after 3 automated attempts:
     *   The system assigns the ticket to a human IT agent, providing AI-generated suggestions to assist them.
 
+![Workflow Diagram](images/workflow_diagram.png)
+
 ## Roadmap & Milestones
 
-1.  **Data Migration (Confluence to GLPI)**
-    *   Migrate data from Confluence (On-Premise) to GLPI Knowledge Base (On-Premise).
-    *   Reason: GLPI has a free community version on premise, no more license costs for Atlassian Confluence and Jira, but no migration tool.
+1.  **Data Migration (from Confluence to GLPI > Tools > Knowledge Base)**
     *   See [User Guide](01_confluence_to_glpi_migration/USER_GUIDE.md)
     *   *Status: Done*
 
-2.  **Data Migration (Jira to GLPI)**
-    *   Migrate data from Jira (On-Premise) to GLPI Projects (On-Premise).
-    *   *Status: Not Started*
+2.  **Data Migration (from Project Jira to GLPI > Tools > Projects)**
+    *   See [User Guide](02_project_jira_to_glpi_project_tasks_migration/USER_GUIDE.md)
+    *   *Status: In Progress*
 
-3.  **Knowledge Base Indexing**
-    *   Implement indexing for the GLPI Knowledge Base to enable efficient retrieval.
-    *   *Status: Not Started*
+3.  **Data Migration (from Support Jira to GLPI > Assistance)**
+    *   *Status: Pending*
 
 4.  **RAG & Agent Orchestration**
     *   Implement Retrieval-Augmented Generation (RAG).
