@@ -150,7 +150,8 @@ def main():
         glpi.init_session()
         print("-> GLPI Connection: OK")
         
-        # Resolve Project ID for target project
+        # Resolve Project ID for configured project
+
         target_project_name = config.GLPI_PROJECT_NAME
         print(f"Resolving GLPI Project '{target_project_name}'...")
         project_id = glpi.get_project_id_by_name(target_project_name)
@@ -163,6 +164,11 @@ def main():
         print("Fetching GLPI Project States...")
         project_states_map = glpi.get_project_states()
         print(f"-> Loaded {len(project_states_map)} states: {project_states_map}")
+
+        # Fetch Project Task Types (Dynamic Mapping)
+        print("Fetching GLPI Project Task Types...")
+        project_types_map = glpi.get_project_task_types()
+        print(f"-> Loaded {len(project_types_map)} types: {project_types_map}")
         
     except Exception as e:
         print(f"Connection Failed: {e}")
@@ -229,6 +235,14 @@ def main():
                          # Default to 'new' (if exists) or ID 1
                          glpi_state_id = project_states_map.get('new', 1) 
                          print(f"    [WARN] Status '{jira_status}' not found in GLPI. Defaulting to ID {glpi_state_id}")
+
+                # Type Mapping (Dynamic)
+                jira_type = fields.get('issuetype', {}).get('name', 'Task')
+                glpi_type_id = project_types_map.get(jira_type.lower())
+                if glpi_type_id:
+                     print(f"    -> Mapped Type '{jira_type}' to GLPI ID {glpi_type_id}")
+                else:
+                     print(f"    [WARN] Type '{jira_type}' not found in GLPI.")
                 
                 # Date Mapping
                 jira_created = fields.get('created')
@@ -279,6 +293,9 @@ def main():
                 
                 if assignee_id:
                      task_kwargs['users_id_tech'] = assignee_id
+                
+                if glpi_type_id:
+                     task_kwargs['projecttasktypes_id'] = glpi_type_id
                 
                 task_id = glpi.create_project_task(project_id, task_name, content_html, **task_kwargs)
                 

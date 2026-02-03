@@ -445,6 +445,33 @@ class GlpiClient:
             print(f"[ERROR] Failed to fetch Project States: {e}")
             return {}
 
+    def get_project_task_types(self):
+        """
+        Fetch all available Project Task Types (ProjectTaskType table).
+        Returns a dict mapping Name_Lower -> ID.
+        """
+        endpoint = f"{self.url}/ProjectTaskType"
+        try:
+            params = {"range": "0-1000"} 
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            response.raise_for_status()
+            
+            types = response.json()
+            if not types:
+                return {}
+                
+            type_map = {}
+            for t in types:
+                name = t.get('name')
+                tid = t.get('id')
+                if name and tid:
+                    type_map[name.lower()] = tid
+            return type_map
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch Project Task Types: {e}")
+            return {}
+
     def get_user_id_by_name(self, username):
         """
         Find a GLPI User ID by their login name (Visa).

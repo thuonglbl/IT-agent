@@ -55,6 +55,18 @@ Open `config_example.py` in a text editor and update the variables with the valu
 *   **BATCH_SIZE**: Default is `50`. Adjust if you want to fetch more/less tickets per request.
 *   **STATE_FILE**: Default is "migration_state.json". This file is used to resume if the script is interrupted (lost internet, server down, etc). To start from the beginning, delete this file.
 
+### Dynamic Type Mapping (Project Tasks)
+
+The script also maps Jira **Issue Types** to GLPI **Project Task Types**.
+
+![Jira Issue Types](../images/jira_issue_types.png)
+
+1.  Log in to GLPI.
+2.  Go to **Setup** > **Dropdowns** > **Assistance** > **Project Tasks Types**.
+3.  Add/edit/delete types, ensuring all Jira issue types are mapped, no missing, no redundant.
+
+![GLPI Project Task Types](../images/glpi_project_task_types.png)
+
 ### Dynamic Status Mapping (Project Tasks)
 
 #### Identify Jira Statuses
