@@ -132,34 +132,116 @@ def process_changelog(issue):
     html += "</table>"
     return html
 
-def main():
-    print("--- Jira to GLPI Migration Tool (ProjecTask + Notes + History) ---")
+def get_hex_color(color_name):
+    # Map Jira statusCategory colors to Hex
+    colors = {
+        "green": "#00875A", # Done
+        "yellow": "#FFAB00", # In Progress
+        "blue-gray": "#42526E", # To Do
+        "brown": "#815b3a",
+        "warm-red": "#DE350B"
+    }
+    return colors.get(color_name, "#42526E") # Default to blue-gray
+
+def run_preparation(glpi, jira):
+    print("\n[PREPARATION] Starting automated environment setup...")
     
-    # 1. Initialize Clients
-    jira = JiraClient(config.JIRA_URL, config.JIRA_PAT, verify_ssl=config.JIRA_VERIFY_SSL)
-    glpi = GlpiClient(config.GLPI_URL, config.GLPI_APP_TOKEN, config.GLPI_USER_TOKEN, verify_ssl=config.GLPI_VERIFY_SSL)
+    # 1. Sync Statuses
+    print("\n--- 1. Syncing Project Statuses ---")
+    # 1a. Clear existing
+    glpi.delete_all_items("ProjectState")
     
-    # Verify Connections
-    print("Checking connections...")
-    try:
-        # Jira Check (fetch 1 issue to test)
-        jira.search_issues(f"project = {config.JIRA_PROJECT_KEY}", max_results=1)
-        print("-> Jira Connection: OK")
+    # 1b. Fetch Jira Statuses
+    print("  > Fetching Statuses from Jira...")
+    jira_statuses = jira.get_project_statuses(config.JIRA_PROJECT_KEY)
+    
+    # 1c. Create in GLPI
+    for s in jira_statuses:
+        name = s['name']
+        color_name = s['statusCategory'].get('colorName')
+        is_finished = 1 if s['statusCategory'].get('key') == 'done' else 0
+        hex_color = get_hex_color(color_name)
         
-        # GLPI Check
+        print(f"  > Creating Status '{name}' (Color: {color_name}/{hex_color}, Finished: {is_finished})...")
+        glpi.create_project_state(name, hex_color, is_finished)
+        time.sleep(0.2)
+        
+    # 2. Sync Types
+    print("\n--- 2. Syncing Project Task Types ---")
+    # 2a. Clear existing
+    glpi.delete_all_items("ProjectTaskType")
+    
+    # 2b. Fetch Jira Types
+    print("  > Fetching Issue Types from Jira...")
+    jira_types = jira.get_project_issue_types(config.JIRA_PROJECT_KEY)
+    
+    # 2c. Create in GLPI
+    for t in jira_types:
+        name = t['name']
+        print(f"  > Creating Type '{name}'...")
+        glpi.create_project_task_type(name)
+        time.sleep(0.2)
+
+    # 3. Validate Users
+    print("\n--- 3. Validating Users ---")
+    print("  > Fetching Assignable Users from Jira...")
+    jira_users = jira.get_project_users(config.JIRA_PROJECT_KEY)
+    
+    print("  > Fetching All Users from GLPI...")
+    glpi_users_map = glpi.get_all_users() # Email -> ID
+    
+    missing_users = []
+    for u in jira_users:
+        email = u.get('emailAddress')
+        name = u.get('name')
+        display_name = u.get('displayName')
+        
+        # Check by email (priority) then name
+        found = False
+        if email and email.lower() in glpi_users_map:
+            found = True
+        elif name and name.lower() in glpi_users_map:
+            found = True
+            
+        if not found:
+            missing_users.append(f"{display_name} ({name}) - {email}")
+            
+    if missing_users:
+        print("\n[WARNING] The following users exist in Jira but NOT in GLPI:")
+        for missing in missing_users:
+            print(f"  [MISSING] {missing}")
+        print("-> Please ask IT to create these users in GLPI before proceeding for accurate assignment.")
+        # We generally don't stop execution, just warn
+    else:
+        print("  > All Jira users found in GLPI. Great!")
+        
+    print("\n[PREPARATION] Completed.\n")
+
+def main():
+    print(f"--- Jira to GLPI Migration Tool (ProjecTask + Notes) ---")
+    
+    # 1. Init Connections
+    try:
+        jira = JiraClient(config.JIRA_URL, config.JIRA_PAT, verify_ssl=config.JIRA_VERIFY_SSL)
+        glpi = GlpiClient(config.GLPI_URL, config.GLPI_APP_TOKEN, config.GLPI_USER_TOKEN, verify_ssl=config.GLPI_VERIFY_SSL)
+        
         glpi.init_session()
         print("-> GLPI Connection: OK")
         
         # Resolve Project ID for configured project
-
         target_project_name = config.GLPI_PROJECT_NAME
         print(f"Resolving GLPI Project '{target_project_name}'...")
         project_id = glpi.get_project_id_by_name(target_project_name)
         if not project_id:
-            print(f"CRITICAL ERROR: Project '{target_project_name}' not found in GLPI. Please create it manually first.")
+            print(f"[ERROR] Project '{target_project_name}' not found!")
             return
         print(f"-> Found Project ID: {project_id}")
-
+        
+        # --- PROACTIVE PREPARATION ---
+        # Run preparation only if state file doesn't exist (First Run)
+        if not os.path.exists(STATE_FILE):
+             run_preparation(glpi, jira)
+        
         # Fetch Project States (Dynamic Mapping)
         print("Fetching GLPI Project States...")
         project_states_map = glpi.get_project_states()

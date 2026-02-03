@@ -65,3 +65,64 @@ class JiraClient:
         except Exception as e:
             print(f"Error downloading attachment: {e}")
             return None
+
+    def get_project_statuses(self, project_key):
+        """
+        Get all statuses for a specific project.
+        Returns a list of dicts with name, color, statusCategory (done/new/indeterminate).
+        """
+        endpoint = f"{self.url}/rest/api/2/project/{project_key}/statuses"
+        try:
+            response = requests.get(endpoint, headers=self.headers, verify=self.verify_ssl)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Helper to flatten the nested structure (IssueType -> Statuses)
+            # We want unique statuses across all issue types in the project
+            unique_statuses = {}
+            
+            for issue_type in data:
+                statuses = issue_type.get('statuses', [])
+                for status in statuses:
+                    s_id = status.get('id')
+                    if s_id not in unique_statuses:
+                        unique_statuses[s_id] = {
+                            'name': status.get('name'),
+                            'description': status.get('description'),
+                            'statusCategory': status.get('statusCategory', {})
+                        }
+            
+            return list(unique_statuses.values())
+            
+        except Exception as e:
+            print(f"Failed to fetch project statuses: {e}")
+            return []
+
+    def get_project_issue_types(self, project_key):
+        """
+        Get all issue types for a specific project.
+        """
+        endpoint = f"{self.url}/rest/api/2/project/{project_key}"
+        try:
+            response = requests.get(endpoint, headers=self.headers, verify=self.verify_ssl)
+            response.raise_for_status()
+            data = response.json()
+            return data.get('issueTypes', [])
+            
+        except Exception as e:
+            print(f"Failed to fetch project issue types: {e}")
+            return []
+
+    def get_project_users(self, project_key):
+        """
+        Get all assignable users for a project.
+        """
+        endpoint = f"{self.url}/rest/api/2/user/assignable/search"
+        params = {"project": project_key, "maxResults": 1000}
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Failed to fetch project users: {e}")
+            return []

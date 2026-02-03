@@ -474,28 +474,121 @@ class GlpiClient:
 
     def get_user_id_by_name(self, username):
         """
-        Find a GLPI User ID by their login name (Visa).
+        Find a GLPI User ID by their login name.
         Returns ID or None.
         """
         endpoint = f"{self.url}/User"
-        params = {
-             "is_deleted": 0,
-             "searchText": username, # Matches 'name' (login) or 'realname' etc.
-             "range": "0-10" 
-        }
+        params = {"searchText": username} 
         
         try:
             response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list):
-                    for user in data:
-                        # Strict check on 'name' (login)
-                        if user.get("name") == username:
-                            return user.get("id")
-        except Exception as e:
-            print(f"Error searching user {username}: {e}")
+            response.raise_for_status()
             
+            users = response.json()
+            if users and len(users) > 0:
+                # Assuming first match is correct (exact match ideally)
+                for u in users:
+                    if u['name'] == username:
+                        return u['id']
+            return None
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to find user '{username}': {e}")
+            return None
+
+    def get_all_users(self):
+        """
+        Fetch all users from GLPI.
+        Returns a dict mapping Email -> ID.
+        """
+        endpoint = f"{self.url}/User"
+        try:
+            params = {"range": "0-5000"} # Increase range if needed
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            response.raise_for_status()
+            
+            users = response.json()
+            user_map = {}
+            for u in users:
+                # User might have multiple emails, need to check how GLPI exposes 'email'
+                # Often it's in a separate table UserEmail, but User object might have 'email' if defaulted?
+                # Usually standard API returns basic fields. Let's try to grab what we can.
+                # Note: GLPI API sometimes doesn't return email in generic list.
+                # If so, we might need to rely on 'name' if emails match usernames.
+                # But requirement is check via Email.
+                # Let's check 'realname' and 'firstname' too?
+                # Actually, standard User object in GLPI should have 'email' if expanded or we might need separate call.
+                # For now assume 'name' is the unique identifier we want to grab, but for Email comparison we need email.
+                # GLPI User Email is in `UserEmail` table linked to User.
+                # Using /User?expand_dropdowns=true might not show emails.
+                # Let's hope 'name' (username) is enough or use 'realname'.
+                
+                # Correction: Migrating emails is tricky due to privacy/structure. 
+                # Let's map by NAME (Username) first if possible, or try to get email field.
+                # If 'email' key exists in user object:
+                email = u.get('email') or u.get('name') # Fallback to name if email missing in summary
+                if email:
+                    user_map[email.lower()] = u['id']
+                    if u.get('name'):
+                         user_map[u.get('name').lower()] = u['id']
+            return user_map
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch users: {e}")
+            return {}
+
+    # --- Preparation Methods (Status & Type Sync) ---
+
+    def delete_all_items(self, endpoint_suffix):
+        """Generic delete all items from an endpoint."""
+        endpoint = f"{self.url}/{endpoint_suffix}"
+        try:
+            params = {"range": "0-1000"}
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            if response.status_code != 200: return
+            
+            items = response.json()
+            if not items: return
+            
+            print(f"  > Deleting {len(items)} items from {endpoint_suffix}...")
+            count = 0
+            for item in items:
+                try:
+                    del_url = f"{endpoint}/{item['id']}"
+                    # Use 'force_purge=true' to permanently delete
+                    requests.delete(del_url, headers=self.headers, params={"force_purge": "true"}, verify=self.verify_ssl)
+                    count += 1
+                except:
+                    pass
+            print(f"  > Deleted {count} items.")
+            
+        except Exception as e:
+            print(f"  > Error clearing {endpoint_suffix}: {e}")
+
+    def create_project_state(self, name, color, is_finished=0):
+        endpoint = f"{self.url}/ProjectState"
+        payload = {
+            "input": {
+                "name": name,
+                "color": color,
+                "is_finished": is_finished
+            }
+        }
+        try:
+            requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+        except Exception as e:
+            print(f"  [ERROR] Failed to create State '{name}': {e}")
+
+    def create_project_task_type(self, name):
+        endpoint = f"{self.url}/ProjectTaskType"
+        payload = {
+            "input": {
+                "name": name
+            }
+        }
+        try:
+            requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+        except Exception as e:
+            print(f"  [ERROR] Failed to create Type '{name}': {e}")       
         return None
 
     def get_project_id_by_name(self, name):
