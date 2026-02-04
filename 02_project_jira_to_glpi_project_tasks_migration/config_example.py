@@ -28,3 +28,11 @@ GLPI_VERIFY_SSL = r"path/to/your/cert.pem"
 # Migration Settings
 BATCH_SIZE = 50 # Number of tickets to fetch per request (Safe default)
 STATE_FILE = "migration_state.json" # to resume if the script is interrupted (lost internet, server down, etc)
+
+# Jira Color Mapping (JIRA Color Name -> GLPI Hex Color)
+# Limitation: Jira API returns the color name 'success', 'inprogress', 'default' but GLPI expects the hex value
+JIRA_COLOR_MAP = {
+    "success": "#00875A", # Green
+    "inprogress": "#0052CC", # Blue
+    "default": "#42526E", # Gray
+}

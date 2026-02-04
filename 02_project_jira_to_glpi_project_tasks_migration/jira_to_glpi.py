@@ -133,15 +133,18 @@ def process_changelog(issue):
     return html
 
 def get_hex_color(color_name):
-    # Map Jira statusCategory colors to Hex
-    colors = {
-        "green": "#00875A", # Done
-        "yellow": "#FFAB00", # In Progress
-        "blue-gray": "#42526E", # To Do
-        "brown": "#815b3a",
-        "warm-red": "#DE350B"
-    }
-    return colors.get(color_name, "#42526E") # Default to blue-gray
+    """
+    Map Jira color names to Hex values.
+    Handles both legacy (Server) and modern (Cloud) color names.
+    Uses config.JIRA_COLOR_MAP for mapping.
+    """
+    default_color = config.JIRA_COLOR_MAP.get("default", "#42526E")
+
+    if not color_name:
+        return default_color
+        
+    c = color_name.lower().replace(" ", "").replace("-", "")
+    return config.JIRA_COLOR_MAP.get(c, default_color)
 
 def run_preparation(glpi, jira):
     print("\n[PREPARATION] Starting automated environment setup...")
