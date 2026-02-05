@@ -23,11 +23,7 @@ class JiraClient:
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": [
-                "summary", "description", "created", "status", 
-                "comment", "attachment", "reporter", "priority",
-                "assignee", "fixVersions", "components", "environment", "resolution"
-            ],
+            "fields": ["*all"],
             "expand": "changelog"
         }
         

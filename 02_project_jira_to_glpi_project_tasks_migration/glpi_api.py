@@ -15,6 +15,8 @@ class GlpiClient:
             "App-Token": self.app_token,
             "Content-Type": "application/json"
         }
+        # User cache: login_name (lowercase) -> user_id
+        self.user_cache = {}
 
     def init_session(self):
         """Initialize session using User Token."""
@@ -472,69 +474,51 @@ class GlpiClient:
             print(f"[ERROR] Failed to fetch Project Task Types: {e}")
             return {}
 
-    def get_user_id_by_name(self, username):
+    def load_user_cache(self):
         """
-        Find a GLPI User ID by their login name.
-        Returns ID or None.
+        Load ALL GLPI users into memory cache for fast O(1) lookups.
+        Uses Search API to bypass entity restrictions.
         """
-        endpoint = f"{self.url}/User"
-        params = {"searchText": username} 
+        print("Loading GLPI User Cache...")
+        # Use Search API - field 1 = login, 2 = id
+        endpoint = f"{self.url}/search/User"
+        params = {
+            "range": "0-10000",
+            "forcedisplay[0]": "1",  # login
+            "forcedisplay[1]": "2",  # id
+            "is_deleted": "0"        # Only active users
+        }
         
         try:
             response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
             response.raise_for_status()
             
-            users = response.json()
-            if users and len(users) > 0:
-                # Assuming first match is correct (exact match ideally)
-                for u in users:
-                    if u['name'] == username:
-                        return u['id']
-            return None
+            result = response.json()
+            data = result.get('data', [])
+            
+            if data:
+                for item in data:
+                    # Search API returns {login: '1', id: '2'}
+                    login = str(item.get('1', '')).lower().strip()
+                    user_id = item.get('2')
+                    if login and user_id:
+                        self.user_cache[login] = user_id
+                        
+            print(f"-> Loaded {len(self.user_cache)} users into cache.")
             
         except Exception as e:
-            print(f"[ERROR] Failed to find user '{username}': {e}")
+            print(f"[ERROR] Failed to load user cache: {e}")
+    
+    def get_user_id_by_name(self, username):
+        """
+        Find a GLPI User ID by their login name.
+        Uses pre-loaded cache for O(1) lookup.
+        Returns ID or None.
+        """
+        if not username:
             return None
+        return self.user_cache.get(username.lower())
 
-    def get_all_users(self):
-        """
-        Fetch all users from GLPI.
-        Returns a dict mapping Email -> ID.
-        """
-        endpoint = f"{self.url}/User"
-        try:
-            params = {"range": "0-5000"} # Increase range if needed
-            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
-            response.raise_for_status()
-            
-            users = response.json()
-            user_map = {}
-            for u in users:
-                # User might have multiple emails, need to check how GLPI exposes 'email'
-                # Often it's in a separate table UserEmail, but User object might have 'email' if defaulted?
-                # Usually standard API returns basic fields. Let's try to grab what we can.
-                # Note: GLPI API sometimes doesn't return email in generic list.
-                # If so, we might need to rely on 'name' if emails match usernames.
-                # But requirement is check via Email.
-                # Let's check 'realname' and 'firstname' too?
-                # Actually, standard User object in GLPI should have 'email' if expanded or we might need separate call.
-                # For now assume 'name' is the unique identifier we want to grab, but for Email comparison we need email.
-                # GLPI User Email is in `UserEmail` table linked to User.
-                # Using /User?expand_dropdowns=true might not show emails.
-                # Let's hope 'name' (username) is enough or use 'realname'.
-                
-                # Correction: Migrating emails is tricky due to privacy/structure. 
-                # Let's map by NAME (Username) first if possible, or try to get email field.
-                # If 'email' key exists in user object:
-                email = u.get('email') or u.get('name') # Fallback to name if email missing in summary
-                if email:
-                    user_map[email.lower()] = u['id']
-                    if u.get('name'):
-                         user_map[u.get('name').lower()] = u['id']
-            return user_map
-        except Exception as e:
-            print(f"[ERROR] Failed to fetch users: {e}")
-            return {}
 
     # --- Preparation Methods (Status & Type Sync) ---
 
@@ -588,7 +572,22 @@ class GlpiClient:
         try:
             requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
         except Exception as e:
-            print(f"  [ERROR] Failed to create Type '{name}': {e}")       
+            print(f"  [ERROR] Failed to create Type '{name}': {e}")
+
+    def add_project_task_team_member(self, task_id, user_id):
+        """Link a User to a Project Task (Task Team)."""
+        endpoint = f"{self.url}/ProjectTaskTeam"
+        payload = {
+            "input": {
+                "projecttasks_id": task_id,
+                "itemtype": "User",
+                "items_id": user_id
+            }
+        }
+        try:
+            requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+        except Exception as e:
+            print(f"  [ERROR] Failed to add User {user_id} to Task {task_id}: {e}")       
         return None
 
     def get_project_id_by_name(self, name):

@@ -35,20 +35,23 @@ def save_state(start_at, total_processed):
         json.dump(state, f, indent=4)
     print(f"  [State Saved] Next fetch starts at {start_at}")
 
-def parse_jira_date(date_str):
+def parse_jira_date(date_str, format_str="%Y-%m-%d %H:%M:%S"):
     """
     Parse Jira date string '2014-03-04T09:46:56.000+0100' 
-    to GLPI format 'YYYY-MM-DD HH:MM:SS'
+    to GLPI format (default: 'YYYY-MM-DD HH:MM:SS')
     """
     if not date_str:
         return None
     try:
         dt = datetime.datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%f%z")
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
+        # Convert to Local System Timezone
+        dt_local = dt.astimezone()
+        return dt_local.strftime(format_str)
     except ValueError:
         try:
             dt = datetime.datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%f%z")
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
+            dt_local = dt.astimezone()
+            return dt_local.strftime(format_str)
         except Exception as e:
             print(f"Date parse error ({date_str}): {e}")
             return None
@@ -63,54 +66,143 @@ def format_description(issue, fields):
     # Extra Fields
     reporter = fields.get('reporter', {}).get('displayName', 'Unknown')
     priority = fields.get('priority', {}).get('name', 'None')
-    created = fields.get('created')
     
-    # Lists
+    # Dates (Formatted)
+    # Match Jira style: "19/Jun/14 3:40 PM"
+    date_fmt = "%d/%b/%y %I:%M %p"
+    created = parse_jira_date(fields.get('created'), date_fmt)
+    updated = parse_jira_date(fields.get('updated'), date_fmt)
+    resolved = parse_jira_date(fields.get('resolutiondate'), date_fmt)
+    
+    # ... (snip) ...
+
+    # Lists & Other Fields
+    resolution = fields.get('resolution', {}).get('name')
+    security = fields.get('security', {}).get('name')
+    labels = ", ".join(fields.get('labels', []))
+    
     affects_versions = ", ".join([v.get('name') for v in fields.get('versions', [])])
     fix_versions = ", ".join([v.get('name') for v in fields.get('fixVersions', [])])
     components = ", ".join([c.get('name') for c in fields.get('components', [])])
     environment = fields.get('environment', '')
-    
+
+    # Urgency Mapping (customfield_10031)
+    urgency_raw = fields.get('customfield_10031', {}).get('value', 'Medium')
+    urgency_map = {
+        'Low': 2, 'Medium': 3, 'High': 4, 'Very High': 5, 'Critical': 5, 'Blocker': 5, 'Serious': 4
+    }
+    urgency_val = urgency_map.get(urgency_raw, 3) # Default 3
+
+    # Section 1: Header
     content_html = f"<p><b>Original Jira Key:</b> {key}</p>"
+    
+    # Section 2: People
+    content_html += "<hr>"
+    content_html += f"<h3>People</h3>"
+    assignee = fields.get('assignee', {}).get('displayName', 'Unassigned')
+    content_html += f"<p><b>Assignee:</b> {assignee}</p>" 
     content_html += f"<p><b>Reporter:</b> {reporter}</p>"
+
+    # Section 3: Dates
+    content_html += "<hr>"
+    content_html += f"<h3>Dates</h3>"
+    # UTC+7 suffix is hardcoded here
+    content_html += f"<p><b>Created:</b> {created} UTC+7</p>"
+    if updated:
+        content_html += f"<p><b>Updated:</b> {updated} UTC+7</p>"
+    if resolved:
+        content_html += f"<p><b>Resolved:</b> {resolved} UTC+7</p>"
+
+    # Section 4: Details (Priority, etc.)
+    content_html += "<hr>"
+    content_html += f"<h3>Details</h3>"
     content_html += f"<p><b>Priority:</b> {priority}</p>"
-    content_html += f"<p><b>Created:</b> {created}</p>"
     
-    if affects_versions:
-        content_html += f"<p><b>Affects Version/s:</b> {affects_versions}</p>"
-    if fix_versions:
-        content_html += f"<p><b>Fix Version/s:</b> {fix_versions}</p>"
-    if components:
-        content_html += f"<p><b>Component/s:</b> {components}</p>"
-    if environment:
-        content_html += f"<p><b>Environment:</b> {environment}</p>"
+    if resolution: content_html += f"<p><b>Resolution:</b> {resolution}</p>"
+    if security:   content_html += f"<p><b>Security Level:</b> {security}</p>"
+    if urgency_raw: content_html += f"<p><b>Urgency:</b> {urgency_raw}</p>"
     
-    content_html += f"<hr><h3>Description</h3>"
+    if fix_versions:     content_html += f"<p><b>Fix Version/s:</b> {fix_versions}</p>"
+    if affects_versions: content_html += f"<p><b>Affects Version/s:</b> {affects_versions}</p>"
+    if components:       content_html += f"<p><b>Component/s:</b> {components}</p>"
+    if labels:           content_html += f"<p><b>Labels:</b> {labels}</p>"
+    if environment:      content_html += f"<p><b>Environment:</b> {environment}</p>"
+
+    # Section 5: Description
+    content_html += "<hr><h3>Description</h3>"
     content_html += f"<div>{description.replace(chr(10), '<br>')}</div>"
     
     return content_html
 
-def process_changelog(issue):
+def process_changelog(issue, glpi):
     """
     Parse changelog to create a History Log HTML.
+    Includes "Issue Created" event.
     """
     changelog = issue.get('changelog', {})
     histories = changelog.get('histories', [])
     
-    if not histories:
-        return None
-
+    # Prepend "Issue Created" event
+    fields = issue.get('fields', {})
+    created_date = fields.get('created')
+    reporter_display = fields.get('reporter', {}).get('displayName', 'Unknown')
+    reporter_name = fields.get('reporter', {}).get('name')
+    
+    # Construct a history item for Creation
+    creation_event = {
+        'created': created_date,
+        'author': {
+            'displayName': reporter_display,
+            'name': reporter_name
+        },
+        'items': [{
+            'field': 'Issue',
+            'fromString': '',
+            'toString': 'Created'
+        }]
+    }
+    
+    # Combine
+    all_events = histories + [creation_event]
+    
+    # Sort by Date DESC (Newest First) to match Jira UI
+    # Jira dates are ISO strings, so string comparison works for sorting
+    all_events.sort(key=lambda x: x.get('created'), reverse=True)
+    
     html = "<h3>Jira History Log</h3>"
     html += "<table border='1' style='border-collapse: collapse; width: 100%;'>"
-    html += "<tr><th>Date</th><th>Author</th><th>Field</th><th>From</th><th>To</th></tr>"
+    html += "<tr><th>Date Time</th><th>Author</th><th>Field</th><th>From</th><th>To</th></tr>"
     
-    for history in histories:
+    for history in all_events:
         created = history.get('created')
-        author = history.get('author', {}).get('displayName', 'Unknown')
+        author_display = history.get('author', {}).get('displayName', 'Unknown')
+        author_name = history.get('author', {}).get('name')
         items = history.get('items', [])
         
-        # Parse date nicely
-        formatted_date = parse_jira_date(created) or created
+        # Parse date nicely matching Jira format: "19/Jun/14 3:40 PM"
+        # And append UTC+7
+        date_fmt = "%d/%b/%y %I:%M %p"
+        base_date = parse_jira_date(created, date_fmt) or created
+        formatted_date = f"{base_date} UTC+7" if base_date else ""
+        
+        # Linkify Author
+        author_html = author_display
+        base_glpi_url = glpi.url.replace('/api.php/v1', '')
+        
+        uid = None
+        if author_name:
+            uid = glpi.get_user_id_by_name(author_name)
+            if not uid:
+                print(f"       [DEBUG-HIST] User lookup failed for login '{author_name}' (Display: {author_display})")
+        
+        # Fallback to Display Name lookup if failed
+        if not uid and author_display:
+             uid = glpi.get_user_id_by_name(author_display)
+             if not uid:
+                 print(f"       [DEBUG-HIST] Fallback lookup also failed for display '{author_display}'")
+             
+        if uid:
+            author_html = f"<a href='{base_glpi_url}/front/user.form.php?id={uid}' target='_blank'>{author_display}</a>"
 
         for item in items:
             field = item.get('field', '')
@@ -123,7 +215,7 @@ def process_changelog(issue):
             
             html += f"<tr>"
             html += f"<td>{formatted_date}</td>"
-            html += f"<td>{author}</td>"
+            html += f"<td>{author_html}</td>"
             html += f"<td>{field}</td>"
             html += f"<td>{from_str}</td>"
             html += f"<td>{to_str}</td>"
@@ -185,38 +277,6 @@ def run_preparation(glpi, jira):
         glpi.create_project_task_type(name)
         time.sleep(0.2)
 
-    # 3. Validate Users
-    print("\n--- 3. Validating Users ---")
-    print("  > Fetching Assignable Users from Jira...")
-    jira_users = jira.get_project_users(config.JIRA_PROJECT_KEY)
-    
-    print("  > Fetching All Users from GLPI...")
-    glpi_users_map = glpi.get_all_users() # Email -> ID
-    
-    missing_users = []
-    for u in jira_users:
-        email = u.get('emailAddress')
-        name = u.get('name')
-        display_name = u.get('displayName')
-        
-        # Check by email (priority) then name
-        found = False
-        if email and email.lower() in glpi_users_map:
-            found = True
-        elif name and name.lower() in glpi_users_map:
-            found = True
-            
-        if not found:
-            missing_users.append(f"{display_name} ({name}) - {email}")
-            
-    if missing_users:
-        print("\n[WARNING] The following users exist in Jira but NOT in GLPI:")
-        for missing in missing_users:
-            print(f"  [MISSING] {missing}")
-        print("-> Please ask IT to create these users in GLPI before proceeding for accurate assignment.")
-        # We generally don't stop execution, just warn
-    else:
-        print("  > All Jira users found in GLPI. Great!")
         
     print("\n[PREPARATION] Completed.\n")
 
@@ -230,6 +290,9 @@ def main():
         
         glpi.init_session()
         print("-> GLPI Connection: OK")
+        
+        # Load user cache for fast lookups
+        glpi.load_user_cache()
         
         # Resolve Project ID for configured project
         target_project_name = config.GLPI_PROJECT_NAME
@@ -264,7 +327,7 @@ def main():
     start_at = state.get("start_at", 0)
     total_processed = state.get("total_processed", 0)
     
-    jql = f"project = '{config.JIRA_PROJECT_KEY}' ORDER BY created ASC"
+    jql = f"project = '{config.JIRA_PROJECT_KEY}' ORDER BY key ASC"
     
     try:
         # Get total count first
@@ -298,12 +361,30 @@ def main():
                 # --- MAPPING LOGIC ---
                 
                 # Assignee -> Tech
-                jira_assignee_name = fields.get('assignee', {}).get('name')
+                assignee_data = fields.get('assignee', {})
+                assignee_name = assignee_data.get('name') # Username used for mapping
+                assignee_display = assignee_data.get('displayName', assignee_name)
+                
                 assignee_id = None
-                if jira_assignee_name:
-                    assignee_id = glpi.get_user_id_by_name(jira_assignee_name)
+                if assignee_name:
+                    assignee_id = glpi.get_user_id_by_name(assignee_name)
                     if assignee_id:
-                        print(f"    -> Mapped Assignee '{jira_assignee_name}' to GLPI ID {assignee_id}")
+                        print(f"    -> Mapped Assignee '{assignee_display}' (User: {assignee_name}) to GLPI ID {assignee_id}")
+                    else:
+                        print(f"    [WARN] Assignee '{assignee_name}' not found in GLPI via Username.")
+
+                # Reporter -> Requester (for Task Team)
+                reporter_data = fields.get('reporter', {})
+                reporter_name = reporter_data.get('name') # Username used for mapping
+                reporter_display = reporter_data.get('displayName', reporter_data.get('name'))
+                
+                reporter_id = None
+                if reporter_name:
+                    reporter_id = glpi.get_user_id_by_name(reporter_name)
+                    if reporter_id:
+                         print(f"    -> Mapped Reporter '{reporter_display}' (User: {reporter_name}) to GLPI ID {reporter_id}")
+                    else:
+                         print(f"    [WARN] Reporter '{reporter_name}' not found in GLPI via Username.")
 
                 # Status Mapping (Dynamic & Case-Insensitive)
                 jira_status = fields.get('status', {}).get('name', 'Open')
@@ -368,16 +449,30 @@ def main():
                 task_name = summary 
                 print(f"    -> Creating GLPI Project Task '{task_name}'...")
                 
+                # Urgency Mapping (customfield_10031) - For Task Field
+                urgency_raw = fields.get('customfield_10031', {}).get('value', 'Medium')
+                urgency_map = {'Low': 2, 'Medium': 3, 'High': 4, 'Very High': 5, 'Critical': 5, 'Blocker': 5, 'Serious': 4}
+                urgency_val = urgency_map.get(urgency_raw, 3)
+
                 task_kwargs = {
                     "projectstates_id": glpi_state_id,
-                    "percent_done": 100 if jira_status in ['Resolved', 'Closed'] else 0
+                    "percent_done": 100 if jira_status_lower in ['resolved', 'closed', 'done'] else 0,
+                    "urgency": urgency_val,
+                    "real_start_date": "NULL", # string literal NULL to force unset
+                    "real_end_date": "NULL"
                 }
+                # map Jira Created -> GLPI 'date'
                 if glpi_date:
                     task_kwargs['date'] = glpi_date
                     task_kwargs['date_creation'] = glpi_date
                 
                 if assignee_id:
                      task_kwargs['users_id_tech'] = assignee_id
+                
+                # Note: 'users_id' in ProjectTask usually means 'Created By'. 
+                # We can map Reporter to it, but also add to Team.
+                if reporter_id:
+                     task_kwargs['users_id'] = reporter_id
                 
                 if glpi_type_id:
                      task_kwargs['projecttasktypes_id'] = glpi_type_id
@@ -387,10 +482,26 @@ def main():
                 if task_id:
                     print(f"       Success! Project Task ID: {task_id}")
                     
-                    # 7. Migrate Comments & History (with Fallback)
+                    # Add to Task Team
+                    if assignee_id:
+                        glpi.add_project_task_team_member(task_id, assignee_id)
+                    if reporter_id and reporter_id != assignee_id:
+                        glpi.add_project_task_team_member(task_id, reporter_id)
+
+                    # 7. Migrate Comments & History
                     failed_notes = []
                     
-                    # 7a. Comments - Use create_note directly (GLPI creates Notes despite returning 400/500)
+                    # 7a. History (Migrate FIRST so it appears at the bottom/oldest in GLPI)
+                    history_html = process_changelog(issue, glpi)
+                    if history_html:
+                        print("       Migrating History Log...")
+                        if not glpi.create_note("ProjectTask", task_id, history_html):
+                             print("          -> History Note creation failed. Queueing for description append.")
+                             # If note fails, we append to Description later.
+                             # But here we just want to ensure it's created first.
+                             failed_notes.append(history_html)
+
+                    # 7b. Comments
                     comments = fields.get('comment', {}).get('comments', [])
                     if comments:
                         print(f"       Migrating {len(comments)} comments as Notes...")
@@ -402,26 +513,35 @@ def main():
                             
                             comment_author_id = None
                             if author_login:
+                                # Try to map by login first, then display name
                                 comment_author_id = glpi.get_user_id_by_name(author_login)
+                                if not comment_author_id and display_name:
+                                     comment_author_id = glpi.get_user_id_by_name(display_name)
                             
+                            # Format Date: "19/Jun/14 3:40 PM UTC+7"
+                            date_fmt = "%d/%b/%y %I:%M %p"
+                            formatted_date = parse_jira_date(created, date_fmt) or created
+                            if formatted_date and not formatted_date.endswith("UTC+7"):
+                                formatted_date = f"{formatted_date} UTC+7"
+
+                            # Linkify Author for Comment Header using BASE URL (strip /api.php/v1)
+                            # User Link: .../front/user.form.php?id=ID
+                            base_glpi_url = glpi.url.replace('/api.php/v1', '')
+                            author_html = display_name
+                            
+                            if comment_author_id:
+                                author_html = f"<a href='{base_glpi_url}/front/user.form.php?id={comment_author_id}' target='_blank'>{display_name}</a>"
+
                             # Build Note content (HTML)
-                            note_html = f"<p><b>[Comment by {display_name} on {created}]</b></p>"
+                            note_html = f"<p><b>{author_html} added a comment - {formatted_date}</b></p>"
                             note_html += f"<div>{body.replace(chr(10), '<br>')}</div>"
                             
                             kw = {}
                             if comment_author_id: 
                                 kw['users_id'] = comment_author_id
 
-                            # Create Note - will succeed despite GLPI returning 400/500
+                            # Create Note
                             glpi.create_note("ProjectTask", task_id, note_html, **kw)
-                            
-                    # 7b. History
-                    history_html = process_changelog(issue)
-                    if history_html:
-                        print("       Migrating History Log...")
-                        if not glpi.create_note("ProjectTask", task_id, history_html):
-                             print("          -> History Note creation failed. Queueing for description append.")
-                             failed_notes.append(history_html)
                              
                     # 7c. Fallback Append
                     if failed_notes:

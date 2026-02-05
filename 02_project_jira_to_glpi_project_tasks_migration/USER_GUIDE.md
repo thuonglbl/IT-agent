@@ -31,6 +31,12 @@ Open a Command Prompt or Terminal in the project folder and run:
 pip install -r requirements.txt
 ```
 
+### User Mapping (Crucial)
+For the script to correctly map **Reporters** and **Assignees** to the GLPI Task Team, the users must exist in GLPI with the **same username** as in Jira.
+1.  **In GLPI**: Go to **Administration > Users**. Ensure all relevant users are created and their **Login** field is populated correctly.
+2.  **In Jira**: Check the user's username in their Profile or User Management.
+3.  **Note**: If a user is not found in GLPI (by Login name), the script will log a `[WARN]` and skip adding them to the team, but the task will still be created.
+
 ### GLPI Configuration (API & Tokens)
 Refer to USER_GUIDE.md in 01_confluence_to_glpi_migration folder for detailed instructions.
 
