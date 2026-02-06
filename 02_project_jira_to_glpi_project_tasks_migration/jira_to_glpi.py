@@ -11,7 +11,7 @@ from glpi_api import GlpiClient
 # Debug Mode
 # Set to True to fetch only 1 ticket and print detailed debug info
 # Set to False to run the full migration
-DEBUG = True
+DEBUG = False
 STATE_FILE = config.STATE_FILE
 
 def load_state():
@@ -64,8 +64,8 @@ def format_description(issue, fields):
     description = fields.get('description') or ""
     
     # Extra Fields
-    reporter = fields.get('reporter', {}).get('displayName', 'Unknown')
-    priority = fields.get('priority', {}).get('name', 'None')
+    reporter = (fields.get('reporter') or {}).get('displayName', 'Unknown')
+    priority = (fields.get('priority') or {}).get('name', 'None')
     
     # Dates (Formatted)
     # Match Jira style: "19/Jun/14 3:40 PM"
@@ -77,8 +77,8 @@ def format_description(issue, fields):
     # ... (snip) ...
 
     # Lists & Other Fields
-    resolution = fields.get('resolution', {}).get('name')
-    security = fields.get('security', {}).get('name')
+    resolution = (fields.get('resolution') or {}).get('name')
+    security = (fields.get('security') or {}).get('name')
     labels = ", ".join(fields.get('labels', []))
     
     affects_versions = ", ".join([v.get('name') for v in fields.get('versions', [])])
@@ -87,7 +87,7 @@ def format_description(issue, fields):
     environment = fields.get('environment', '')
 
     # Urgency Mapping (customfield_10031)
-    urgency_raw = fields.get('customfield_10031', {}).get('value', 'Medium')
+    urgency_raw = (fields.get('customfield_10031') or {}).get('value', 'Medium')
     urgency_map = {
         'Low': 2, 'Medium': 3, 'High': 4, 'Very High': 5, 'Critical': 5, 'Blocker': 5, 'Serious': 4
     }
@@ -99,7 +99,7 @@ def format_description(issue, fields):
     # Section 2: People
     content_html += "<hr>"
     content_html += f"<h3>People</h3>"
-    assignee = fields.get('assignee', {}).get('displayName', 'Unassigned')
+    assignee = (fields.get('assignee') or {}).get('displayName', 'Unassigned')
     content_html += f"<p><b>Assignee:</b> {assignee}</p>" 
     content_html += f"<p><b>Reporter:</b> {reporter}</p>"
 
@@ -145,8 +145,8 @@ def process_changelog(issue, glpi):
     # Prepend "Issue Created" event
     fields = issue.get('fields', {})
     created_date = fields.get('created')
-    reporter_display = fields.get('reporter', {}).get('displayName', 'Unknown')
-    reporter_name = fields.get('reporter', {}).get('name')
+    reporter_display = (fields.get('reporter') or {}).get('displayName', 'Unknown')
+    reporter_name = (fields.get('reporter') or {}).get('name')
     
     # Construct a history item for Creation
     creation_event = {
@@ -175,8 +175,8 @@ def process_changelog(issue, glpi):
     
     for history in all_events:
         created = history.get('created')
-        author_display = history.get('author', {}).get('displayName', 'Unknown')
-        author_name = history.get('author', {}).get('name')
+        author_display = (history.get('author') or {}).get('displayName', 'Unknown')
+        author_name = (history.get('author') or {}).get('name')
         items = history.get('items', [])
         
         # Parse date nicely matching Jira format: "19/Jun/14 3:40 PM"
@@ -361,7 +361,7 @@ def main():
                 # --- MAPPING LOGIC ---
                 
                 # Assignee -> Tech
-                assignee_data = fields.get('assignee', {})
+                assignee_data = fields.get('assignee') or {}
                 assignee_name = assignee_data.get('name') # Username used for mapping
                 assignee_display = assignee_data.get('displayName', assignee_name)
                 
@@ -374,7 +374,7 @@ def main():
                         print(f"    [WARN] Assignee '{assignee_name}' not found in GLPI via Username.")
 
                 # Reporter -> Requester (for Task Team)
-                reporter_data = fields.get('reporter', {})
+                reporter_data = fields.get('reporter') or {}
                 reporter_name = reporter_data.get('name') # Username used for mapping
                 reporter_display = reporter_data.get('displayName', reporter_data.get('name'))
                 
@@ -387,7 +387,7 @@ def main():
                          print(f"    [WARN] Reporter '{reporter_name}' not found in GLPI via Username.")
 
                 # Status Mapping (Dynamic & Case-Insensitive)
-                jira_status = fields.get('status', {}).get('name', 'Open')
+                jira_status = (fields.get('status') or {}).get('name', 'Open')
                 jira_status_lower = jira_status.lower()
                 glpi_state_id = project_states_map.get(jira_status_lower)
                 
@@ -403,7 +403,7 @@ def main():
                          print(f"    [WARN] Status '{jira_status}' not found in GLPI. Defaulting to ID {glpi_state_id}")
 
                 # Type Mapping (Dynamic)
-                jira_type = fields.get('issuetype', {}).get('name', 'Task')
+                jira_type = (fields.get('issuetype') or {}).get('name', 'Task')
                 glpi_type_id = project_types_map.get(jira_type.lower())
                 if glpi_type_id:
                      print(f"    -> Mapped Type '{jira_type}' to GLPI ID {glpi_type_id}")
@@ -450,7 +450,7 @@ def main():
                 print(f"    -> Creating GLPI Project Task '{task_name}'...")
                 
                 # Urgency Mapping (customfield_10031) - For Task Field
-                urgency_raw = fields.get('customfield_10031', {}).get('value', 'Medium')
+                urgency_raw = (fields.get('customfield_10031') or {}).get('value', 'Medium')
                 urgency_map = {'Low': 2, 'Medium': 3, 'High': 4, 'Very High': 5, 'Critical': 5, 'Blocker': 5, 'Serious': 4}
                 urgency_val = urgency_map.get(urgency_raw, 3)
 
@@ -502,14 +502,14 @@ def main():
                              failed_notes.append(history_html)
 
                     # 7b. Comments
-                    comments = fields.get('comment', {}).get('comments', [])
+                    comments = (fields.get('comment') or {}).get('comments', [])
                     if comments:
                         print(f"       Migrating {len(comments)} comments as Notes...")
                         for comment in comments:
-                            author_login = comment.get('author', {}).get('name') 
+                            author_login = (comment.get('author') or {}).get('name') 
                             body = comment.get('body', '')
                             created = comment.get('created')
-                            display_name = comment.get('author', {}).get('displayName') or author_login
+                            display_name = (comment.get('author') or {}).get('displayName') or author_login
                             
                             comment_author_id = None
                             if author_login:
