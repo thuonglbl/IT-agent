@@ -20,3 +20,4 @@ config.py
 
 # Migration State
 migration_state.json
+migration_state_tickets.json
