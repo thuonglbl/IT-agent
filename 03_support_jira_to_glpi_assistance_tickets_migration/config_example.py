@@ -27,4 +27,36 @@ GLPI_VERIFY_SSL = r"path/to/your/cert.pem"
 
 # Migration Settings
 BATCH_SIZE = 50 # Number of tickets to fetch per request (Safe default)
-STATE_FILE = "migration_state.json" # to resume if the script is interrupted (lost internet, server down, etc)
+STATE_FILE = "migration_state.json" # to resume if the script is interrupted (lost internet, VPN down, computer sleep, etc)
+DEBUG = True # Set to True to process only 1 issue for testing, set to False to run the full migration
+
+# Mapping Settings
+# Jira Status -> GLPI Status ID Mapping
+# GLPI Statuses (cannot change): 1=New, 10=Approval, 2=Processing(Assigned), 3=Processing(Planned), 4=Pending, 5=Solved, 6=Closed
+STATUS_MAPPING = {
+    'assigned': 2,
+    'in progress': 3,
+    'resolved': 5,
+    'on hold': 4,
+    'closed': 6,
+    'submitted': 10,
+    'waiting for approval': 1,
+    'open': 1,
+    'planned': 3,
+    'delivered': 5,
+    'completed': 6,
+    'ready for delivery': 5,
+}
+# Default if not found
+DEFAULT_STATUS = 3
+
+# Jira Issue Type -> GLPI Ticket Type Mapping
+# 1 = Incident, 2 = Request
+TYPE_MAPPING = {
+    'change': 2,
+    'incident': 1,
+    'support request': 2,
+    'rollout': 2,
+}
+# Default if not found
+DEFAULT_TYPE = 2

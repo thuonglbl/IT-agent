@@ -93,6 +93,82 @@ class GlpiClient:
         return self.user_cache.get(username.lower())
 
     # --- Ticket Management ---
+    def get_status_id_map(self):
+        """
+        Get valid Ticket Statuses from GLPI.
+        Returns dict: {name_lower: id}
+        Note: GLPI Ticket Statuses are usually fixed (1-6).
+        """
+        # Standard GLPI Statuses (Hardcoded fallback if API fails)
+        # 1: New, 10:Approval, 2: Processing (Assigned), 3: Processing (Planned), 4: Pending, 5: Solved, 6: Closed
+        standard_statuses = {
+            "new": 1,
+            "approval": 10,
+            "processing (assigned)": 2,
+            "assigned": 2,
+            "processing (planned)": 3,
+            "planned": 3,
+            "pending": 4,
+            "solved": 5,
+            "closed": 6
+        }
+        
+        # Try to fetch from API if possible (listSearchOptions)
+        endpoint = f"{self.url}/listSearchOptions/Ticket"
+        try:
+            response = requests.get(endpoint, headers=self.headers, verify=self.verify_ssl)
+            if response.ok:
+                data = response.json()
+                # Field 12 is Status
+                status_field = data.get('12', {})
+                choices = status_field.get('k', {}) or status_field.get('choices', {})
+                
+                if choices:
+                    api_map = {}
+                    for k, v in choices.items():
+                        # k is ID, v is Name
+                        api_map[str(v).lower()] = int(k)
+                    print(f"Loaded {len(api_map)} statuses from GLPI API.")
+                    return api_map
+        except Exception as e:
+            print(f"Failed to fetch statuses from API ({e}), using default.")
+            
+        return standard_statuses
+
+    def get_type_id_map(self):
+        """
+        Get valid Ticket Types from GLPI.
+        Returns dict: {name_lower: id}
+        Standard: 1 = Incident, 2 = Request
+        """
+        standard_types = {
+            "incident": 1,
+            "request": 2,
+            "demande": 2
+        }
+        
+        # Try to fetch from API if possible
+        endpoint = f"{self.url}/listSearchOptions/Ticket"
+        try:
+            response = requests.get(endpoint, headers=self.headers, verify=self.verify_ssl)
+            if response.ok:
+                data = response.json()
+                # Field 14 is Type
+                type_field = data.get('14', {})
+                choices = type_field.get('k', {}) or type_field.get('choices', {})
+                
+                if choices:
+                    api_map = {}
+                    for k, v in choices.items():
+                        # k is ID, v is Name
+                        api_map[str(v).lower()] = int(k)
+                    print(f"Loaded {len(api_map)} types from GLPI API.")
+                    return api_map
+        except Exception as e:
+            print(f"Failed to fetch types from API ({e}), using default.")
+            
+        return standard_types
+
     def create_ticket(self, name, content, **kwargs):
         """Create a standard Assistance Ticket."""
         endpoint = f"{self.url}/Ticket"
@@ -121,6 +197,19 @@ class GlpiClient:
                 print(e.response.text)
             return None
 
+    def update_ticket(self, ticket_id, **kwargs):
+        """Update an existing ticket."""
+        endpoint = f"{self.url}/Ticket/{ticket_id}"
+        payload = {"input": kwargs}
+        try:
+            response = requests.put(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            response.raise_for_status()
+            print(f"  -> Updated Ticket {ticket_id}")
+            return True
+        except Exception as e:
+            print(f"Failed to update Ticket {ticket_id}: {e}")
+            return False
+
     def add_ticket_followup(self, ticket_id, content, users_id=None, is_private=0, date=None):
         """Add a comment (Followup) to a ticket."""
         endpoint = f"{self.url}/ITILFollowup"
@@ -142,6 +231,37 @@ class GlpiClient:
         except Exception as e:
             print(f"Failed to add followup to ticket {ticket_id}: {e}")
             return False
+
+    # --- Category Management ---
+    def get_category_id_map(self):
+        """
+        Get all ITIL Categories.
+        Returns dict: {completename_lower: id}
+        """
+        endpoint = f"{self.url}/ITILCategory"
+        params = {"range": "0-1000"}
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            if response.ok:
+                data = response.json()
+                # Map 'name' or 'completename' to ID
+                # Using lower case for case-insensitive matching
+                return {item['name'].lower(): item['id'] for item in data}
+        except Exception:
+            pass
+        return {}
+
+    def create_category(self, name):
+        """Create a new ITIL Category."""
+        endpoint = f"{self.url}/ITILCategory"
+        payload = {"input": {"name": name}}
+        try:
+            response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            response.raise_for_status()
+            return response.json().get('id')
+        except Exception as e:
+            print(f"Failed to create category '{name}': {e}")
+            return None
 
     # --- Document Management (Attachments) ---
     def upload_document(self, file_path, name=None):

@@ -6,35 +6,16 @@ import config
 from jira_client import JiraClient
 from glpi_client_support import GlpiClient
 
-# --- Configuration ---
-DEBUG = True # Set to True to process only 1 issue for testing
-BATCH_SIZE = 50
-STATE_FILE = "migration_state_tickets.json"
-# Jira Status -> GLPI Status ID Mapping (Core Statuses)
-# 1=New, 2=Processing(Assigned), 3=Processing(Planned), 4=Pending, 5=Solved, 6=Closed
-STATUS_MAPPING = {
-    'open': 1,
-    'new': 1,
-    'to do': 1,
-    'in progress': 2,
-    'analyzing': 2,
-    'pending': 4,
-    'resolved': 5,
-    'done': 5,
-    'closed': 6,
-    'cancelled': 6
-}
-# Default if not found
-DEFAULT_STATUS = 2
-
 def load_state():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, 'r') as f:
+    if os.path.exists(config.STATE_FILE):
+        with open(config.STATE_FILE, 'r') as f:
             return json.load(f)
     return {"start_at": 0, "total_processed": 0}
 
 def save_state(start_at, total_processed):
-    with open(STATE_FILE, 'w') as f:
+    abs_path = os.path.abspath(config.STATE_FILE)
+    print(f"  [DEBUG] Saving state to: {abs_path}")
+    with open(config.STATE_FILE, 'w') as f:
         json.dump({"start_at": start_at, "total_processed": total_processed, "timestamp": time.time()}, f)
 
 def parse_jira_date(date_str):
@@ -61,6 +42,37 @@ def main():
         # 2. Load cached data
         glpi.load_user_cache(recursive=True) # Recursive as requested
         
+        # --- PREPARATION: Check Statuses ---
+        print("\n--- Checking Statuses ---")
+        # 1. Load Jira Statuses
+        jira_statuses = jira.get_project_statuses(config.JIRA_PROJECT_KEY)
+        jira_status_names = {s['name'].lower(): s['name'] for s in jira_statuses} # lower -> Original
+        print(f"Jira Project Statuses: {list(jira_status_names.values())}")
+        
+        # 2. Check existence in GLPI
+        glpi_status_map = glpi.get_status_id_map() # name_lower -> id
+        
+        # 3. Build Dynamic Mapping
+        # Start with default mapping to cover standard cases
+        DYNAMIC_MAPPING = config.STATUS_MAPPING.copy()
+        
+        for j_lower, j_original in jira_status_names.items():
+            if j_lower in glpi_status_map:
+                glpi_id = glpi_status_map[j_lower]
+                DYNAMIC_MAPPING[j_lower] = glpi_id
+                print(f"  [MATCH] '{j_original}' maps to GLPI Status ID {glpi_id}")
+            else:
+                # Try fuzzy matching or fallback
+                # Note: GLPI Ticket Statuses are fixed (1-6). We cannot create new ones via API.
+                # We map to DEFAULT_STATUS and log warning.
+                if j_lower not in DYNAMIC_MAPPING:
+                    print(f"  [MISSING] '{j_original}' not found in GLPI. Mapping to Default ({config.DEFAULT_STATUS}).")
+                    # DYNAMIC_MAPPING[j_lower] = DEFAULT_STATUS # Explicitly set default
+        
+        print("Status Mapping Ready.\n")
+        
+        print("Type Mapping Ready.\n")
+        
         # 3. Load State
         state = load_state()
         start_at = state["start_at"]
@@ -69,9 +81,9 @@ def main():
         print(f"Resuming migration from index {start_at}...")
         
         while True:
-            # JQL: Fetch ALL tickets (Open & Closed)
-            jql = f"project = {config.JIRA_PROJECT_KEY} ORDER BY created ASC"
-            issues, total = jira.search_issues(jql, start_at=start_at, max_results=BATCH_SIZE)
+            # JQL: Fetch ALL tickets (Open & Closed), Ordered by KEY/ID ASC
+            jql = f"project = {config.JIRA_PROJECT_KEY} ORDER BY key ASC"
+            issues, total = jira.search_issues(jql, start_at=start_at, max_results=config.BATCH_SIZE)
             
             if not issues:
                 print("All issues processed.")
@@ -80,11 +92,12 @@ def main():
             print(f"Fetched {len(issues)} issues (Total: {total}). processing...")
             
             for issue in issues:
-                process_issue(jira, glpi, issue)
+                process_issue(jira, glpi, issue, DYNAMIC_MAPPING)
                 total_processed += 1
                 
-                if DEBUG:
-                    print("[DEBUG] Mode enabled. Processed 1 issue. Exiting.")
+                if config.DEBUG:
+                    print("[DEBUG] Mode enabled. Processed 1 issue. Saving state and Exiting.")
+                    save_state(start_at + 1, total_processed)
                     return
                 
             start_at += len(issues)
@@ -96,61 +109,117 @@ def main():
     finally:
         glpi.kill_session()
 
-def process_issue(jira, glpi, issue):
+def process_issue(jira, glpi, issue, status_mapping):
     key = issue['key']
     fields = issue['fields']
+    # 1. Title: Use summary directly (No ID)
     summary = fields.get('summary', '[No Title]')
     description = fields.get('description') or ""
     
     # --- Map Users ---
     reporter_jira = (fields.get('reporter') or {}).get('name')
+    # Use display name for better logging/fallback
+    reporter_display = (fields.get('reporter') or {}).get('displayName', reporter_jira)
+    
     assignee_jira = (fields.get('assignee') or {}).get('name')
     
+    # Debug User Mapping
     requester_id = glpi.get_user_id_by_name(reporter_jira)
-    assignee_id = glpi.get_user_id_by_name(assignee_jira)
+    if not requester_id:
+        print(f"  [WARN] Requester not found in GLPI: '{reporter_jira}' ({reporter_display})")
     
+    assignee_id = glpi.get_user_id_by_name(assignee_jira)
+    if assignee_jira and not assignee_id:
+         print(f"  [WARN] Assignee not found in GLPI: '{assignee_jira}'")
+
     # --- Map Status ---
     status_jira = (fields.get('status') or {}).get('name', '').lower()
-    glpi_status = STATUS_MAPPING.get(status_jira, DEFAULT_STATUS)
+    glpi_status = status_mapping.get(status_jira, config.DEFAULT_STATUS)
+    print(f"  Status Check: Jira '{status_jira}' -> GLPI ID {glpi_status}")
+    
+    # --- Map Type ---
+    type_jira = (fields.get('issuetype') or {}).get('name', '').lower()
+    
+    # --- Type Fallback ---
+    # Map Jira Type to GLPI Ticket Type (1=Incident, 2=Request)
+    glpi_type = config.TYPE_MAPPING.get(type_jira, config.DEFAULT_TYPE)
+    
+    # NOTE: SLA (Time to Own) is now auto-calculated by GLPI. Removed extraction logic.
+
+    # --- Dates ---
     
     # --- Dates ---
     creation_date = parse_jira_date(fields.get('created'))
     update_date = parse_jira_date(fields.get('updated'))
+    resolution_date = parse_jira_date(fields.get('resolutiondate'))
     
     print(f"Migrating {key}: {summary}...")
     
-    # --- Create Ticket ---
-    # Prepend Jira Link to description
-    full_desc = f"**Imported from Jira**: [{key}]({config.JIRA_URL}/browse/{key})\n\n{description}"
+    # --- 3. Description Header & Details ---
+    # Construct "Jira Details" table
+    issue_type = (fields.get('issuetype') or {}).get('name', 'Ticket')
+    priority = (fields.get('priority') or {}).get('name', 'Normal')
+    components = ", ".join([c.get('name') for c in fields.get('components', [])])
+    labels = ", ".join(fields.get('labels', []))
+    
+    # "Imported from Jira" header removed. Link is embedded in details.
+    details_table = (
+        f"**Jira Details**:\n"
+        f"| Field | Value |\n"
+        f"|---|---|\n"
+        f"| **Key** | [{key}]({config.JIRA_URL}/browse/{key}) |\n"
+        f"| **Type** | {issue_type} |\n"
+        f"| **Priority** | {priority} |\n"
+        f"| **Component** | {components} |\n"
+        f"| **Labels** | {labels} |\n"
+        f"| **Reporter** | {reporter_display} |\n"
+        f"\n---\n\n"
+    )
+    
+    full_desc = details_table + description
     
     ticket_args = {
         "status": glpi_status,
+        "type": glpi_type,
         "date": creation_date,
-        "date_mod": update_date
+        # NOTE: date_mod and time_to_own are auto-generated by GLPI, not set here.
     }
     
-    # Actors
+    # 4. Fix Dates (Solved/Closed)
+    # If ticket is solved (5) or closed (6), set solvedate
+    if glpi_status in [5, 6]:
+        # Use resolution date if available, else update date
+        final_date = resolution_date or update_date
+        ticket_args["solvedate"] = final_date
+    
+    if glpi_status == 6:
+         # For closed tickets, usually closedate = solvedate
+         ticket_args["closedate"] = resolution_date or update_date
+
+    # 5. Actors
     if requester_id:
         ticket_args['_users_id_requester'] = requester_id
     if assignee_id:
         ticket_args['_users_id_assign'] = assignee_id
         
-    ticket_id = glpi.create_ticket(name=f"[{key}] {summary}", content=full_desc, **ticket_args)
+    ticket_id = glpi.create_ticket(name=summary, content=full_desc, **ticket_args)
     
     if ticket_id:
         # --- Migrate Comments ---
-        # Jira 'comment' field usually contains comments list
         comments = (fields.get('comment') or {}).get('comments', [])
         for comment in comments:
             author_jira = (comment.get('author') or {}).get('name')
+            author_display = (comment.get('author') or {}).get('displayName', author_jira)
             body = comment.get('body', '')
             created = parse_jira_date(comment.get('created'))
             
             author_id = glpi.get_user_id_by_name(author_jira)
             
             # Format comment header
-            header = f"**Comment by {author_jira} ({created})**:\n"
+            header = f"**Comment by {author_display} ({created})**:\n"
             glpi.add_ticket_followup(ticket_id, header + body, users_id=author_id, date=created)
+            
+        # NOTE: Last Update Date (date_mod) is auto-generated by GLPI and cannot be overwritten.
             
         print(f"  -> Done. ID: {ticket_id}")
 

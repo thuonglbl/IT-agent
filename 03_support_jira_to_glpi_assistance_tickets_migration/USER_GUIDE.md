@@ -1,22 +1,112 @@
-# User Guide: Jira Support to GLPI Assistance Tickets
+# User Guide: Jira Support to GLPI Assistance Migration
 
-## Overview
-This tool migrates support tickets from a Jira Project to GLPI Assistance Tickets.
+This script automates the migration of Jira Support Issues to GLPI Assistance Tickets via the REST API. It uses the Jira API to fetch issues and the GLPI API to create tickets, preserving history, comments, and actors.
 
-## Features
-- Creates GLPI Tickets from Jira Issues.
-- Maps Reporter and Assignee to GLPI Users.
-- Migrates Comments and History as Followups.
-- Preserves Dates (Creation, Update).
-- Maps Statuses (Open, Done, etc. -> New, Solved, etc.).
+## 1. Directory Structure
 
-## Prerequisites
-1.  **Config**: Update `config.py` in this directory.
-    - Set `JIRA_PROJECT_KEY`.
-    - Set `GLPI_APP_TOKEN` and `GLPI_USER_TOKEN`.
-2.  **Dependencies**: Install typical python requests.
+Inside the `03_support_jira_to_glpi_assistance_tickets_migration` folder, you will find:
+- `config.py`: Configuration file (Important).
+- `migrate_support_tickets.py`: Main script to execute the migration.
+- `jira_client.py`: Jira API client library.
+- `glpi_client_support.py`: GLPI API client library (specifically for Tickets).
+- `migration_state.json`: Auto-generated file to track progress (Resume capability).
 
-## How to Run
+## 2. Prerequisites
+
+### Install Python
+Ensure Python 3.x is installed on your system.
+```bash
+python --version
+```
+
+If not install, Install Python Silently (Without GUI)
+```bash
+python-installer.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+```
+
+### Install Dependencies
+Open a Command Prompt or Terminal in the project folder and run:
+```bash
+pip install -r requirements.txt
+```
+
+### User Mapping (Crucial)
+For the script to correctly map **Reporters (Requesters)** and **Assignees (Technicians)** to the GLPI Ticket:
+1.  **In GLPI**: Users must exist with the **same username (Login)** as in Jira.
+2.  **Recursive Search**: The script searches for users across all entities (`is_recursive=True`).
+3.  **Fallback**: If a user is not found, the Ticket is created with the API User as the creator, and the original Jira reporter name is mentioned in the Description.
+
+### Jira Configuration (PAT)
+You need a **Personal Access Token (PAT)** from Jira (See Milestone 2 guide for steps).
+
+### GLPI Configuration (API & Tokens)
+You need an **App-Token** and **User-Token** from GLPI (See Milestone 1 guide for steps).
+
+## 3. Configuration
+
+Open `config_example.py`, update the values, and save it as `config.py`:
+
+*   **JIRA_URL**: URL of your Jira Server.
+*   **JIRA_PAT**: Your Personal Access Token.
+*   **JIRA_PROJECT_KEY**: Key of the project to migrate.
+*   **JIRA_VERIFY_SSL**: Verify SSL (True/False/Path recommend True).
+*   **GLPI_URL**: Your GLPI API URL (e.g., `.../api.php/v1`).
+*   **GLPI_APP_TOKEN**: Your GLPI App Token.
+*   **GLPI_USER_TOKEN**: Your GLPI User Token.
+*   **GLPI_VERIFY_SSL**: Verify SSL (True/False/Path recommend Path).
+*   **BATCH_SIZE**: Number of tickets per batch.
+*   **STATUS_MAPPING**: Status mapping from Jira (flexible) to GLPI (fixed).
+*   **TYPE_MAPPING**: Type mapping from Jira (flexible) to GLPI (fixed).
+
+## 4. Running the Migration
+
+Run the following command:
 ```bash
 python migrate_support_tickets.py
 ```
+
+## 5. Features & Behavior
+
+### Resume Capability (State Saving)
+*   The script creates `migration_state.json`.
+*   **If the script stops** (e.g., network error), run it again to **resume** from the last batch.
+*   To restart from the beginning, delete `migration_state.json`.
+
+### Ticket Fields Mapping
+*   **Title/Summary**: Uses Jira Summary directly (Original Key is in Description).
+*   **Description**:
+    *   Adds a **Jira Details** table at the top (Type, Priority, Component, Labels, Reporter).
+    *   Preserves original description content.
+*   **Status Mapping (Dynamic)**:
+    *   The script reads all statuses from your Jira Project.
+    *   It attempts to match them with GLPI Ticket Statuses (New, Processing, Solved, Closed, etc.).
+    *   If a match is found (by name), it maps automatically.
+    *   If not found, it defaults to **Processing (Assigned)**.
+*   **Type -> Category Sync (Dynamic)**:
+    *   Jira **Issue Types** (e.g., Bug, Story, Request) are mapped to **GLPI ITIL Categories**.
+    *   **Auto-Create**: If the Category doesn't exist in GLPI, the script **creates it automatically**.
+    *   **GLPI Ticket Type**: Defaults to **Request** (2), unless the Jira type contains "Incident", then it sets to **Incident** (1).
+
+### Dates & Actors
+*   **Dates**:
+    *   **Creation Date**: Preserved.
+    *   **Update Date**: Preserved.
+    *   **Resolution Date**: Mapped to GLPI `solvedate` (and `closedate` if closed).
+*   **Actors**:
+    *   **Requester**: Maps Jira Reporter.
+    *   **Technician**: Maps Jira Assignee.
+    *   **Recursive Search**: Finds users across all GLPI entities.
+    *   *Note*: If a user is not found, a Warning is logged, and the field is left empty (or set to API user).
+
+### Comments & History
+*   **Comments**: Migrated as **Followups** in GLPI. The header `**Comment by <User> (<Date>)**` is added to preserve context.
+*   **History**: Not explicitly migrated as log entries, but the *Update Date* of the ticket is synced.
+
+## 6. Verification
+*   Check the console output for "Created Ticket ID: ...".
+*   Check **Assistance > Tickets** in GLPI to see the new tickets.
+*   Verify that ticket overview and detail are correct.
+
+## 7. Limitations
+*   **Ticket ID**: GLPI generates new IDs. The original Jira Key is preserved in the first message for reference.
+*   **Users**: cannot create or sync user. If a user is not found, a Warning is logged, and the field is left empty.
