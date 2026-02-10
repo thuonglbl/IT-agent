@@ -72,6 +72,8 @@ Open `config_example.py` in a text editor and update the variables with the valu
     *   Set to `r"C:\path\to\your\cert.pem"` to use a custom CA certificate (required for internal GLPI servers with self-signed or enterprise certs, contact your GLPI administrator to get the certificate).
     *   Set to `False` to disable verification (insecure, not recommended).
 
+Navigate to **Setup** > **Plugins** to find relevant plugins affect login, disable them temporarily to avoid authentication issues before running the script.
+
 ## 4. Running the Migration
 
 ### Test Connection (Recommended)

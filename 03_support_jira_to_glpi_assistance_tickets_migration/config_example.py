@@ -60,3 +60,19 @@ TYPE_MAPPING = {
 }
 # Default if not found
 DEFAULT_TYPE = 2
+
+# Additional Custom Fields for Description Mapping
+CLASSIFICATION_ID = 'customfield_12010'
+REPORTER_DETAILS_ID = 'customfield_11710'
+REQUEST_PARTICIPANTS_ID = 'customfield_10911' # Request participants
+CUSTOMER_REQUEST_TYPE_ID = 'customfield_10912' # Service Desk Request Type
+
+# SLA Configuration: in case Jira has SLA integration
+# Custom Field IDs, use Inspect to get this value from Jira
+SLA_FIELDS = [
+    'customfield_11512', # Time to assign
+    'customfield_11515', # In Progress
+    'customfield_11514', # In progress To Fixed
+    'customfield_11516', # Resolved to Closed
+    'customfield_12310'  # Approval expiry
+]

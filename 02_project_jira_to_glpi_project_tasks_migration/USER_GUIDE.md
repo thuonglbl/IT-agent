@@ -61,6 +61,12 @@ Open `config_example.py` in a text editor and update the variables with the valu
 *   **BATCH_SIZE**: Default is `50`. Adjust if you want to fetch more/less tickets per request.
 *   **STATE_FILE**: Default is "migration_state.json". This file is used to resume if the script is interrupted (lost internet, server down, etc). To start from the beginning, delete this file.
 
+Navigate to **Administration** > **Users** to ensure all users available before running the script.
+
+Navigate to **Administration** > **Rules** to find relevant rules affect project tasks, disable them temporarily to avoid overwriting before running the script.
+
+Navigate to **Setup** > **Plugins** to find relevant plugins affect login, disable them temporarily to avoid authentication issues before running the script.
+
 ## 4. Running the Migration
 
 Run the following command:

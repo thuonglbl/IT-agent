@@ -58,6 +58,12 @@ Open `config_example.py`, update the values, and save it as `config.py`:
 *   **STATUS_MAPPING**: Status mapping from Jira (flexible) to GLPI (fixed).
 *   **TYPE_MAPPING**: Type mapping from Jira (flexible) to GLPI (fixed).
 
+Navigate to **Administration** > **Users** to ensure all users available before running the script.
+
+Navigate to **Administration** > **Rules** to find relevant rules affect assistance tickets, disable them temporarily to avoid overwriting before running the script.
+
+Navigate to **Setup** > **Plugins** to find relevant plugins affect login, disable them temporarily to avoid authentication issues before running the script.
+
 ## 4. Running the Migration
 
 Run the following command:

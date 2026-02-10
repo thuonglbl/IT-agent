@@ -17,6 +17,8 @@ class GlpiClient:
         }
         # User cache: login_name (lowercase) -> user_id
         self.user_cache = {}
+        # Group cache: name (lowercase) -> group_id
+        self.group_cache = {}
 
     def init_session(self):
         """Initialize session using User Token."""
@@ -91,6 +93,53 @@ class GlpiClient:
     def get_user_id_by_name(self, username):
         if not username: return None
         return self.user_cache.get(username.lower())
+
+    # --- Group Cache ---
+    def load_group_cache(self, recursive=True):
+        """
+        Load ALL GLPI groups into memory cache.
+        recursive=True ensures we get groups from sub-entities.
+        """
+        print("Loading GLPI Group Cache (Recursive)...")
+        endpoint = f"{self.url}/search/Group"
+        params = {
+            "range": "0-10000",
+            "forcedisplay[0]": "1",  # name
+            "forcedisplay[1]": "2",  # id
+            "forcedisplay[2]": "14", # completename (for hierarchical match)
+        }
+        if recursive:
+            params["is_recursive"] = "1"
+        
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            response.raise_for_status()
+            
+            result = response.json()
+            data = result.get('data', [])
+            
+            if data:
+                for item in data:
+                    name = str(item.get('1', '')).lower().strip()
+                    # Also map completename if available for precise matching
+                    completename = str(item.get('14', '')).lower().strip()
+                    group_id = item.get('2')
+                    
+                    if name and group_id:
+                        self.group_cache[name] = group_id
+                    if completename and group_id:
+                        self.group_cache[completename] = group_id
+                        
+            print(f"-> Loaded {len(self.group_cache)} groups into cache.")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to load group cache: {e}")
+
+    def get_group_id_by_name(self, group_name):
+        if not group_name: return None
+        # Try both direct name and last part of hierarchy path if needed
+        # Or simple exact match
+        return self.group_cache.get(group_name.lower())
 
     # --- Ticket Management ---
     def get_status_id_map(self):
