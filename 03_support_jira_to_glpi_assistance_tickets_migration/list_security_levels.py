@@ -11,7 +11,7 @@ unique_levels = set()
 print("Scannning Jira issues for Security Levels...")
 
 while True:
-    issues, total = jira.search_issues(f"project = {config.JIRA_PROJECT_KEY}", start_at=start_at, max_results=50, fields=["security"])
+    issues, total = jira.search_issues(f"project = {config.JIRA_PROJECT_KEY}", start_at=start_at, max_results=50)
     if not issues:
         break
         

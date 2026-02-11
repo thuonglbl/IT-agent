@@ -31,6 +31,13 @@ pip install -r requirements.txt
 ```
 
 ### User Mapping (Crucial)
+For the script to correctly map **Reporters (Requesters)** and **Assignees (Technicians)** to the GLPI Ticket, the users must exist in GLPI.
+
+#### Step 0: Import Users from LDAP
+Before running this migration, ensure all users are imported into GLPI.
+Please refer to the script in `02_project_jira_to_glpi_project_tasks_migration/import_ldap_playwright.py` or import them manually via **Administration > Users > LDAP Directory Link**.
+
+### Jira Configuration (PAT)
 For the script to correctly map **Reporters (Requesters)** and **Assignees (Technicians)** to the GLPI Ticket:
 1.  **In GLPI**: Users must exist with the **same username (Login)** as in Jira.
 2.  **Recursive Search**: The script searches for users across all entities (`is_recursive=True`).

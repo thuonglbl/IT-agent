@@ -32,6 +32,26 @@ pip install -r requirements.txt
 ```
 
 ### User Mapping (Crucial)
+For the script to correctly map **Reporters** and **Assignees** to the GLPI Task Team, the users must exist in GLPI.
+
+#### Step 0: Import Users from LDAP
+Before running the migration, you must import all users from LDAP into GLPI.
+We have provided a script `import_ldap_playwright.py` to automate this process (since manual import is slow).
+
+**How to run it:**
+1.  **Install Browser Binaries** (Run once):
+    ```bash
+    # Note: 'playwright' library is installed via requirements.txt
+    playwright install chromium
+    ```
+2.  **Run the script:**
+    Change MAX_BATCHES in import_ldap_playwright.py to 1 to debug, or set to 1000 for full run
+    ```bash
+    python import_ldap_playwright.py
+    ```
+3.  Enter your GLPI credentials and let it run until all users are imported.
+
+### Jira Configuration (PAT)
 For the script to correctly map **Reporters** and **Assignees** to the GLPI Task Team, the users must exist in GLPI with the **same username** as in Jira.
 1.  **In GLPI**: Go to **Administration > Users**. Ensure all relevant users are created and their **Login** field is populated correctly.
 2.  **In Jira**: Check the user's username in their Profile or User Management.
