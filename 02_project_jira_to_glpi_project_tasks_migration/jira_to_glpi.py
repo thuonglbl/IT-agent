@@ -2,6 +2,7 @@ import os
 import json
 import time
 import requests
+import re
 import datetime
 import config
 from jira_client import JiraClient
@@ -127,6 +128,22 @@ def format_description(issue, fields):
     if components:       content_html += f"<p><b>Component/s:</b> {components}</p>"
     if labels:           content_html += f"<p><b>Labels:</b> {labels}</p>"
     if environment:      content_html += f"<p><b>Environment:</b> {environment}</p>"
+
+    # Sprint Mapping (customfield_10210)
+    # Format: [ 'com.atlassian.greenhopper.service.sprint.Sprint@...[name=Sprint 1,id=1...]' ]
+    sprint_raw_list = fields.get('customfield_10210')
+    if sprint_raw_list and isinstance(sprint_raw_list, list):
+        sprints = []
+        for s in sprint_raw_list:
+            if isinstance(s, str):
+                # Extract 'name=Value'
+                match = re.search(r'name=([^,\]]+)', s)
+                if match:
+                    sprints.append(match.group(1))
+        
+        if sprints:
+            sprint_str = ", ".join(sprints)
+            content_html += f"<p><b>Sprint:</b> {sprint_str}</p>"
 
     # Section 5: Description
     content_html += "<hr><h3>Description</h3>"
@@ -327,7 +344,13 @@ def main():
     start_at = state.get("start_at", 0)
     total_processed = state.get("total_processed", 0)
     
-    jql = f"project = '{config.JIRA_PROJECT_KEY}' ORDER BY key ASC"
+    # Store Jira Key -> GLPI Project Task ID for Parent-Child linking
+    # We load this ideally from a file or DB, but for this script we assume single-run or we might lose context on restart.
+    # TODO: For better robustnes, save this map to disk.
+    jira_map = {} 
+
+    # jql = f"project = '{config.JIRA_PROJECT_KEY}' ORDER BY key ASC"
+    jql = f"key in ({config.JIRA_PROJECT_KEY}-277, {config.JIRA_PROJECT_KEY}-278) ORDER BY key ASC" # TARGETED DEBUG
     
     try:
         # Get total count first
@@ -477,10 +500,26 @@ def main():
                 if glpi_type_id:
                      task_kwargs['projecttasktypes_id'] = glpi_type_id
                 
+                # Parent-Child Linking
+                # If issue has a parent, try to find its GLPI ID from our map
+                parent_field = fields.get('parent')
+                if parent_field:
+                    parent_key = parent_field.get('key')
+                    if parent_key:
+                        parent_glpi_id = jira_map.get(parent_key)
+                        if parent_glpi_id:
+                            print(f"    -> Linking as child of {parent_key} (GLPI ID: {parent_glpi_id})")
+                            task_kwargs['projecttasks_id'] = parent_glpi_id
+                        else:
+                            print(f"    [WARN] Parent {parent_key} not found in current map (maybe not processed yet?)")
+
                 task_id = glpi.create_project_task(project_id, task_name, content_html, **task_kwargs)
                 
                 if task_id:
                     print(f"       Success! Project Task ID: {task_id}")
+                    
+                    # Store in Map for children
+                    jira_map[key] = task_id
                     
                     # Add to Task Team
                     if assignee_id:

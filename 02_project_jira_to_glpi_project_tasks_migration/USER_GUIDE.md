@@ -44,12 +44,25 @@ We have provided a script `import_ldap_playwright.py` to automate this process (
     # Note: 'playwright' library is installed via requirements.txt
     playwright install chromium
     ```
-2.  **Run the script:**
+
+2.  **Configuration (Recommended):**
+    Open `config.py` and ensure `GLPI_URL` is set to `http` if your server is NOT support SSL to avoid SSL redirect loops, if supported keep it as `https`.
+    
+    To automate login (optional), add your credentials to `config.py`:
+    ```python
+    # Add to config.py
+    GLPI_USERNAME = "your_username"
+    GLPI_PASSWORD = "your_password"
+    ```
+
+3.  **Run the script:**
     Change MAX_BATCHES in import_ldap_playwright.py to 1 to debug, or set to 1000 for full run
     ```bash
     python import_ldap_playwright.py
     ```
-3.  Enter your GLPI credentials and let it run until all users are imported.
+    
+4.  **Process:**
+    The script will launch a browser, login automatically (if credentials provided), and import users in batches. It includes auto-retry logic for network glitches and redirects.
 
 ### Jira Configuration (PAT)
 For the script to correctly map **Reporters** and **Assignees** to the GLPI Task Team, the users must exist in GLPI with the **same username** as in Jira.

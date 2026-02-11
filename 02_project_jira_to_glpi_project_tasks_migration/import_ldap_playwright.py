@@ -11,7 +11,7 @@ LOGIN_URL = f"{GLPI_URL}/front/login.php"
 # BATCH_SIZE = 3: GLPI can't handle more than 3 users at a time, so do not modify BATCH_SIZE
 # MAX_BATCHES = 1: set to 1 to debug, set to 1000 or similar for full run, depends on number of users
 BATCH_SIZE = 3
-MAX_BATCHES = 192
+MAX_BATCHES = 95
 
 def run():
     print("GLPI LDAP Import Automation (Playwright)")
@@ -21,8 +21,19 @@ def run():
     print("2. playwright install chromium")
     print("----------------------------------------")
     
-    username = input("GLPI Username: ")
-    password = getpass.getpass("GLPI Password: ")
+    # Try to get credentials from config first
+    username = getattr(config, 'GLPI_USERNAME', None)
+    password = getattr(config, 'GLPI_PASSWORD', None)
+
+    if not username:
+        username = input("GLPI Username: ")
+    else:
+        print(f"Using GLPI Username from config: {username}")
+        
+    if not password:
+        password = getpass.getpass("GLPI Password: ")
+    else:
+        print("Using GLPI Password from config.")
     
     with sync_playwright() as p:
         print("Launching browser...")
@@ -81,25 +92,33 @@ def run():
             # Navigating directly with params might cause session redirect issues
             
             print(f"Navigating to base import page...")
-            try:
-                page.goto(LDAP_IMPORT_URL, timeout=60000, wait_until='domcontentloaded')
-            except Exception as e:
-                print(f"Navigation to import page timed out/error: {e}")
+            
+            # --- Retry logic for initial navigation ---
+            max_nav_retries = 3
+            nav_success = False
+            for retry in range(max_nav_retries):
+                try:
+                    page.goto(LDAP_IMPORT_URL, timeout=60000, wait_until='domcontentloaded')
+                    nav_success = True
+                    break
+                except Exception as e:
+                    print(f"Navigation error (Attempt {retry+1}/{max_nav_retries}): {e}")
+                    time.sleep(5)
+            
+            if not nav_success:
+                print("Failed to navigate to import page after retries. Retrying batch...")
+                time.sleep(10)
+                continue
 
-            # 2b. Select LDAP Server (if dropdown exists) and Search
-            # Look for select name="authldaps_id" or "id"
-            # And click Search button
-            
-            # Use query params ONLY for limit if needed, but safe to just search
-            # If we don't select server, it might error.
-            # Select first option if available
-            
+            # Verify we are on the correct page (or at least not an error page)
             # Simple approach: Check if we are on the form
-            if str(page.url).endswith("ldap.import.php"):
+            if "ldap.import.php" in str(page.url):
                  print("Import page confirmed. Looking for Search button...")
                  
                  # Try multiple search button locators
-                 search_btn = page.locator('input[type="submit"][name="search"]')
+                 search_btn = page.locator('button[name="search"]') # Standard GLPI
+                 if not search_btn.is_visible():
+                     search_btn = page.locator('input[type="submit"][name="search"]')
                  if not search_btn.is_visible():
                      search_btn = page.locator('button[type="submit"]').filter(has_text="Search")
                  if not search_btn.is_visible():
@@ -125,20 +144,18 @@ def run():
                  pass
             
             # 3. Check for users
-            
-            # Check if we need to click "Search" button first
-            # If URL parameters work, we should see the list.
-            # Let's verify if 'Search' is needed.
-            # Usually passing parameters via GET works.
-            
-            # 3. Check for users
             # The checkbox name pattern is item[AuthLDAP][GUID]
-            # We can count them.
             checkboxes = page.locator('input[name^="item[AuthLDAP]"]').all()
             count = len(checkboxes)
             print(f"Found {count} users on this page.")
             
             if count == 0:
+                # Double check to ensure we didn't miss loading
+                if "ldap.import.php" not in page.url:
+                     print(f"Warning: Count is 0 but URL is strange ({page.url}). Might be an error page. Retrying batch...")
+                     time.sleep(5)
+                     continue
+                
                 print("No more users found to import. Process complete!")
                 break
             
@@ -215,42 +232,41 @@ def run():
 
                     if post_btn.is_visible():
                         print(f"Found Submit button: {post_btn.inner_text() if post_btn.count()>0 else 'Input'}. Clicking...")
-                        post_btn.click()
+                        try:
+                            with page.expect_navigation(timeout=60000, wait_until='domcontentloaded'):
+                                post_btn.click()
+                            print("Submit successful, page reloaded.")
+                        except Exception as e:
+                            print(f"Navigation error after submit (likely redirect loop): {e}")
+                            print("Continuing to next batch...")
+                            # The loop will restart and go to LDAP_IMPORT_URL (HTTP)
+                            continue
                     else:
                         # Fallback to specific selector if generic failed
                         print("Trying specific selector...")
                         post_btn = page.locator('button[name="massiveaction"][type="submit"]')
                         try:
-                            post_btn.wait_for(state="visible", timeout=5000)
-                            post_btn.click()
-                            print("Clicked Submit button.")
-                        except:
-                            print("Could not find Submit button even after wait!")
-                        
+                           with page.expect_navigation(timeout=60000, wait_until='domcontentloaded'):
+                                post_btn.click()
+                           print("Clicked Submit button.")
+                        except Exception as e:
+                            print(f"Could not submit or navigation error: {e}")
+                            print("Continuing...")
+                            continue
+
                 except Exception as e:
                     print(f"Error interacting with Massive Action popup: {e}")
-                    break
+                    # Force reload on error
+                    continue
             else:
                  print("Could not find 'Actions' button! Cannot proceed.")
                  break
 
-            # 6. Wait for processing
-            print("Waiting for import to complete...")
-            # GLPI usually shows a progress bar or redirects back
-            # Use domcontentloaded instead of networkidle
-            try:
-                page.wait_for_load_state('domcontentloaded', timeout=60000)
-            except:
-                print("Wait for page reload timed out, but continuing...")
-            
-            # Check for success message
-            if page.locator('.alert-success').is_visible():
-                print("Batch import successful.")
-            else:
-                print("Warning: Did not see success message. Proceeding.")
+            # 6. Wait for processing (Redundant if expect_navigation used, but kept for safety)
+            # print("Waiting for import to complete...")
             
             total_imported += count
-            print(f"Imported {count} users (Total: {total_imported}).")
+            print(f"Imported batch of {len(to_select)} users (Total processed: {total_imported}).")
             
             # Small pause to be safe
             time.sleep(2)

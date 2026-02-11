@@ -24,6 +24,9 @@ GLPI_USER_TOKEN = "your-user-token"
 # - True: Verify using default system CAs
 # - "path/to/cert.pem": Verify using specific CA bundle
 GLPI_VERIFY_SSL = r"path/to/your/cert.pem"
+# Optional: Credentials for automation import LDAP users on GLPI (Leave empty to be prompted)
+GLPI_USERNAME = ""
+GLPI_PASSWORD = ""
 
 # Migration Settings
 BATCH_SIZE = 50 # Number of tickets to fetch per request (Safe default)
