@@ -14,6 +14,7 @@ from glpi_api import GlpiClient
 # Set to False to run the full migration
 DEBUG = False
 STATE_FILE = config.STATE_FILE
+MAPPING_FILE = "migration_id_map.json"
 
 def load_state():
     """Load the last processed index from state file."""
@@ -35,6 +36,24 @@ def save_state(start_at, total_processed):
     with open(STATE_FILE, 'w') as f:
         json.dump(state, f, indent=4)
     print(f"  [State Saved] Next fetch starts at {start_at}")
+
+def load_mapping():
+    """Load Jira Key -> GLPI ID mapping from file."""
+    if os.path.exists(MAPPING_FILE):
+        try:
+            with open(MAPPING_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not read mapping file: {e}")
+    return {}
+
+def save_mapping(mapping):
+    """Save Jira Key -> GLPI ID mapping to file."""
+    try:
+        with open(MAPPING_FILE, 'w') as f:
+            json.dump(mapping, f, indent=4)
+    except Exception as e:
+        print(f"Warning: Could not save mapping file: {e}")
 
 def parse_jira_date(date_str, format_str="%Y-%m-%d %H:%M:%S"):
     """
@@ -345,12 +364,10 @@ def main():
     total_processed = state.get("total_processed", 0)
     
     # Store Jira Key -> GLPI Project Task ID for Parent-Child linking
-    # We load this ideally from a file or DB, but for this script we assume single-run or we might lose context on restart.
-    # TODO: For better robustnes, save this map to disk.
-    jira_map = {} 
+    jira_map = load_mapping()
+    print(f"Loaded {len(jira_map)} existing ID mappings.")
 
-    # jql = f"project = '{config.JIRA_PROJECT_KEY}' ORDER BY key ASC"
-    jql = f"key in ({config.JIRA_PROJECT_KEY}-277, {config.JIRA_PROJECT_KEY}-278) ORDER BY key ASC" # TARGETED DEBUG
+    jql = f"project = '{config.JIRA_PROJECT_KEY}' ORDER BY key ASC"
     
     try:
         # Get total count first
@@ -603,6 +620,7 @@ def main():
             # Update Batch Progress
             start_at += len(issues)
             save_state(start_at, total_processed)
+            save_mapping(jira_map)
 
             # DEBUG 
             if DEBUG:
