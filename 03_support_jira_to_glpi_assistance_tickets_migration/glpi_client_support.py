@@ -260,6 +260,105 @@ class GlpiClient:
                 print(f"  Response: {e.response.text}")
             return None
 
+    # --- Location Cache ---
+    def load_location_cache(self):
+        """
+        Load ALL GLPI Locations into memory cache.
+        """
+        print("Loading GLPI Location Cache...")
+        endpoint = f"{self.url}/search/Location"
+        params = {
+            "range": "0-10000",
+            "forcedisplay[0]": "1",  # name
+            "forcedisplay[1]": "2",  # id
+            "forcedisplay[2]": "14", # completename (Location > SubLocation)
+        }
+        self.location_cache = {} # Ensure initialized
+        
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            response.raise_for_status()
+            
+            result = response.json()
+            data = result.get('data', [])
+            
+            if data:
+                for item in data:
+                    name = str(item.get('1', '')).lower().strip()
+                    completename = str(item.get('14', '')).lower().strip()
+                    loc_id = item.get('2')
+                    
+                    if name and loc_id:
+                        self.location_cache[name] = loc_id
+                    if completename and loc_id:
+                        self.location_cache[completename] = loc_id
+                        
+            print(f"-> Loaded {len(self.location_cache)} locations into cache.")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to load location cache: {e}")
+
+    def get_location_id(self, location_name):
+        if not location_name: return None
+        return self.location_cache.get(location_name.lower())
+
+    # --- Item Search ---
+    def get_item_id(self, item_type, item_name):
+        """
+        Search for an asset/item by name and type.
+        item_type: 'BusinessService', 'Software', 'Computer', etc.
+        (Note: Handles 'Business_Service' alias by converting to 'BusinessService')
+        """
+        if not item_type or not item_name:
+            return None
+            
+        # Normalize item_type
+        # GLPI API usually expects 'BusinessService' (CamelCase) or 'Software'
+        if item_type == 'Business_Service':
+            item_type = 'BusinessService'
+            
+        # Endpoint e.g., /search/Software
+        endpoint = f"{self.url}/search/{item_type}"
+        
+        # Criteria to search by name
+        # criteria[0][field]=1 (name)
+        # criteria[0][searchtype]=contains (or equals)
+        # criteria[0][value]=item_name
+        
+        # Using exact match logic if possible or verify result
+        params = {
+            "criteria[0][field]": "1", # Name
+            "criteria[0][searchtype]": "equals",
+            "criteria[0][value]": item_name,
+            "forcedisplay[0]": "1", # Name
+            "forcedisplay[1]": "2", # ID
+        }
+        
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            
+            # Some item types might not exist/be active, handle 400/404 elegantly
+            if response.status_code != 200:
+                # Try simple list if search fails or just return None
+                return None
+                
+            result = response.json()
+            data = result.get('data', [])
+            
+            # Return first match
+            for item in data:
+                found_id = item.get('2')
+                found_name = str(item.get('1', ''))
+                # Double check exact match case-insensitive
+                if found_name.lower() == item_name.lower():
+                    return found_id
+            
+            return None
+            
+        except Exception as e:
+            # print(f"[WARN] Failed to search item {item_type} '{item_name}': {e}")
+            return None
+
     # --- Ticket Management ---
     def get_status_id_map(self):
         """

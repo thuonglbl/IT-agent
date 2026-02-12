@@ -94,6 +94,53 @@ SLA_FIELDS = [
     'customfield_11512', # Time to assign
     'customfield_11515', # In Progress
     'customfield_11514', # In progress To Fixed
-    'customfield_11516', # Resolved to Closed
     'customfield_12310'  # Approval expiry
 ]
+
+# --- Classification Mapping ---
+# Map Jira Classification -> GLPI Location (Name)
+# Check GLPI: Setup > Dropdowns > Common > Locations
+CLASSIFICATION_TO_LOCATION = {
+    'CH': 'CH',
+    'VN': 'VN',
+    'ES': 'ES',
+    'MU': 'MU',
+}
+
+# Map Jira Classification -> GLPI Item
+# Format: 'JiraValue': ('ItemType', 'ItemName')
+# Supported Types based on your GLPI: 'Business_Service' (Assets > Business Service), 'Software' (Assets > Software), 'Computer' (Assets > Computers)
+CLASSIFICATION_TO_ITEM = {
+    # Business_Service (Assets > Business Service)
+    'Intranet':         ('Business_Service', 'SharePoint Intranet'),
+    'Network':          ('Business_Service', 'Network Configuration'),
+    'Internet':         ('Business_Service', 'Network Configuration'),
+    'Project_Portal':   ('Business_Service', 'Project Monitoring Tool'),
+    'SkillMatrix':      ('Business_Service', 'Project Monitoring Tool'),
+    'Project_Space':    ('Business_Service', 'Project Space'),
+    'ERP':              ('Business_Service', 'ERP'),
+    'Firewall':         ('Business_Service', 'Network Configuration'),
+    'CV_Tool':          ('Business_Service', 'CV Tool'),
+    'ESS':              ('Business_Service', 'ESS'),
+    'FCR':              ('Business_Service', 'FCR'),
+    'Incident':         ('Business_Service', 'Incident'),
+    'Office_Access':    ('Business_Service', 'Office Access'),
+    'Oracle_DB':        ('Business_Service', 'ORACLE ERP'),
+    'Oracle_HR':        ('Business_Service', 'ORACLE ERP'),
+    'Oracle_Procurement': ('Business_Service', 'ORACLE ERP'),
+    'Oracle_Other':     ('Business_Service', 'ORACLE ERP'),
+    'Other':            ('Business_Service', 'Other'),
+    'PT_Tool':          ('Business_Service', 'PT Tool'),
+    
+    # Software (Assets > Software)
+    'Security':         ('Software', 'Windows Security'),
+    'Teams':            ('Software', 'Microsoft Teams'),
+    'Edge':             ('Software', 'Microsoft Edge'),
+    'SharePoint':       ('Software', 'Sharepoint-app'),
+    'Azure':            ('Software', 'Azure VPN Client'), 
+    'VPN':              ('Software', 'Ashwind VPN'),
+    'ashwind':          ('Software', 'Ashwind VPN'),
+    'Workstation':      ('Software', 'VMware Workstation'),    
+    'Email':            ('Software', 'Email and accounts'),    
+    'license':          ('Software', 'Add License in the manager platform'),    
+}

@@ -281,6 +281,7 @@ def main():
         glpi.load_user_cache(recursive=True) 
         glpi.load_group_cache(recursive=True)
         glpi.load_category_cache(recursive=True)
+        glpi.load_location_cache()
         
         # Status Mapping
         jira_statuses = jira.get_project_statuses(config.JIRA_PROJECT_KEY)
@@ -484,21 +485,71 @@ def process_issue(jira, glpi, issue, status_mapping):
     if not sla_info_rows:
         sla_info_rows = "<tr><td colspan='4'>No SLA Data</td></tr>"
 
+    # --- Classification Mapping (Location & Items) ---
+    classification_raw = fields.get(getattr(config, 'CLASSIFICATION_ID', ''))
+    # Normalize to list of strings
+    classifications = []
+    if isinstance(classification_raw, list):
+         for c in classification_raw:
+             classifications.append(str(c.get('value') if isinstance(c, dict) else c))
+    elif classification_raw:
+         classifications.append(str(classification_raw.get('value') if isinstance(classification_raw, dict) else classification_raw))
+    
+    location_id = None
+    items_to_link = {} # {"Type": [ID, ID]}
+    
+    for cls in classifications:
+        # Check Location Mapping
+        if cls in config.CLASSIFICATION_TO_LOCATION:
+             loc_name = config.CLASSIFICATION_TO_LOCATION[cls]
+             lid = glpi.get_location_id(loc_name)
+             if lid:
+                 location_id = lid
+                 print(f"  -> Mapped Classification '{cls}' to Location '{loc_name}' (ID: {lid})")
+             else:
+                 print(f"  [WARN] Location '{loc_name}' not found in GLPI (mapped from '{cls}')")
+        
+        # Check Item Mapping
+        if cls in config.CLASSIFICATION_TO_ITEM:
+             item_type, item_name = config.CLASSIFICATION_TO_ITEM[cls]
+             # Normalize Business_Service -> BusinessService for API if config has it
+             if item_type == 'Business_Service': item_type = 'BusinessService'
+             
+             iid = glpi.get_item_id(item_type, item_name)
+             if iid:
+                 if item_type not in items_to_link:
+                     items_to_link[item_type] = []
+                 items_to_link[item_type].append(iid)
+                 print(f"  -> Found Item '{item_name}' ({item_type}) ID: {iid}")
+             else:
+                 print(f"  [WARN] Item '{item_name}' ({item_type}) not found in GLPI (mapped from '{cls}')")
+                 
+    classification_str = ", ".join(classifications)
+
     # --- History Extraction ---
     html_history = extract_history_table(issue, glpi)
 
+    # --- Description Formatting ---
+    component_names = ", ".join([c.get('name') for c in fields.get('components', [])])
+    reporter_details = fields.get(getattr(config, 'REPORTER_DETAILS_ID', ''), '')
+    resolution = (fields.get('resolution') or {}).get('name', 'Unresolved')
+    
+    details_rows = f"""
+    <tr><td><strong>Key</strong></td><td><a href="{config.JIRA_URL}/browse/{key}">{key}</a></td></tr>
+    <tr><td><strong>Type</strong></td><td>{issue_type}</td></tr>
+    <tr><td><strong>Priority</strong></td><td>{priority_jira}</td></tr>
+    <tr><td><strong>Resolution</strong></td><td>{resolution}</td></tr>
+    <tr><td><strong>Component</strong></td><td>{component_names}</td></tr>
+    <tr><td><strong>Classification</strong></td><td>{classification_str}</td></tr>
+    <tr><td><strong>Security Level</strong></td><td>{security}</td></tr>
+    <tr><td><strong>Reporter Details</strong></td><td>{reporter_details}</td></tr>
+    """
+    
     html_details = f"""
     <h3>Jira Details</h3>
     <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
         <tr><th style="background-color: #f2f2f2; width: 30%;">Field</th><th style="background-color: #f2f2f2;">Value</th></tr>
-        <tr><td><strong>Key</strong></td><td><a href="{config.JIRA_URL}/browse/{key}">{key}</a></td></tr>
-        <tr><td><strong>Type</strong></td><td>{issue_type}</td></tr>
-        <tr><td><strong>Priority</strong></td><td>{priority}</td></tr>
-        <tr><td><strong>Resolution</strong></td><td>{resolution}</td></tr>
-        <tr><td><strong>Component</strong></td><td>{components}</td></tr>
-        <tr><td><strong>Classification</strong></td><td>{classification}</td></tr>
-        <tr><td><strong>Security Level</strong></td><td>{security}</td></tr>
-        <tr><td><strong>Reporter Details</strong></td><td>{reporter_details}</td></tr>
+        {details_rows}
     </table>
     """
 
@@ -592,7 +643,22 @@ def process_issue(jira, glpi, issue, status_mapping):
                 print(f"  -> Mapped Security Level '{sec_name}' to GLPI Category ID {cat_id}")
             else:
                 print(f"  [WARN] Security Level '{sec_name}' could not be mapped to GLPI Category.")
-        
+    
+    # --- Locations & Items from Classification ---
+    if location_id:
+        ticket_args['locations_id'] = location_id
+    
+    # Items linking (GLPI API supports 'items_id': {"Type": [ID]})
+    if items_to_link:
+        try:
+             # Basic ticket creation usually accepts items_id dict
+             ticket_args['items_id'] = items_to_link
+             # Flatten for logging
+             flat_items = [f"{k}:{v}" for k,v in items_to_link.items()]
+             print(f"  -> Linking Items: {', '.join(flat_items)}")
+        except Exception as e:
+             print(f"  [WARN] Failed to prepare items linking: {e}")
+
     ticket_id = glpi.create_ticket(name=summary, content=full_desc, **ticket_args)
     
     print(f"  -> Ticket created ID: {ticket_id}")

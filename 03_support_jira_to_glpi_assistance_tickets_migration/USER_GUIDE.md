@@ -64,6 +64,19 @@ Open `config_example.py`, update the values, and save it as `config.py`:
 *   **BATCH_SIZE**: Number of tickets per batch.
 *   **STATUS_MAPPING**: Status mapping from Jira (flexible) to GLPI (fixed).
 *   **TYPE_MAPPING**: Type mapping from Jira (flexible) to GLPI (fixed).
+*   **CLASSIFICATION_MAPPING**:
+    *   **Step 1: List Classifications**: Run `python list_classifications.py` to see all unique Classification values in your Jira project.
+    *   **Step 2: Define Mappings**:
+        *   Open `config.py` (or `config_example.py` as reference).
+        *   Update `CLASSIFICATION_TO_LOCATION` to map classifications to GLPI Location Names.
+        *   Update `CLASSIFICATION_TO_ITEM` to map classifications to GLPI Items (Type + Name).
+        *   Supported Item Types: `Business_Service`, `Software`, `Computer`.
+    *   **Step 3: Verification in GLPI**:
+        *   Log in to GLPI.
+        *   Navigate to **Setup > Dropdowns > Common > Locations** to verify Location names match your config.
+        *   Navigate to **Assets > Business Services** to verify Business Service names.
+        *   Navigate to **Assets > Software** to verify Software names.
+        *   *If items are missing in GLPI, the migration will skip linking them (with a warning).*
 
 Navigate to **Administration** > **Users** to ensure all users available before running the script.
 
@@ -77,6 +90,8 @@ Run the following command:
 ```bash
 python migrate_support_tickets.py
 ```
+After run, check file `missing_users.txt` to see if there are any users that need to be imported into GLPI, then delete all tickets and run the script again.
+If run fail, check file `migration_state.json` to see where the script stopped, and run `python migrate_support_tickets.py` again. Delete `migration_state.json` to start the migration from the beginning (remember to delete all tickets first).
 
 ## 5. Features & Behavior
 
