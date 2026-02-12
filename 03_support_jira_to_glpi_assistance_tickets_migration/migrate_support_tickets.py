@@ -11,6 +11,9 @@ from glpi_client_support import GlpiClient
 # Define UTC+7 Timezone
 TZ_VN = timezone(timedelta(hours=7))
 
+# Track missing users (login -> display_name) across the entire run
+_missing_users = {}
+
 def load_state():
     if os.path.exists(config.STATE_FILE):
         with open(config.STATE_FILE, 'r') as f:
@@ -241,16 +244,43 @@ def extract_history_table(issue, glpi):
     </table>
     """
 
+def report_missing_user(login_name, display_name):
+    """Track a missing user. Each user is reported only once."""
+    if not login_name or login_name in _missing_users:
+        return
+    _missing_users[login_name] = display_name or login_name
+    print(f"    [MISSING USER] {login_name} ({display_name})")
+
+def save_missing_users_report():
+    """Write missing users to a tab-separated text file."""
+    if not _missing_users:
+        print("No missing users to report.")
+        return
+    filepath = getattr(config, 'MISSING_USERS_FILE', 'missing_users.txt')
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write("Login Name\tFull Name\n")
+        for login, display in sorted(_missing_users.items()):
+            f.write(f"{login}\t{display}\n")
+    print(f"\n[REPORT] {len(_missing_users)} missing users written to {filepath}")
+
 def main():
     print("--- Jira Support to GLPI Assistance Migration ---")
     
     jira = JiraClient(config.JIRA_URL, config.JIRA_PAT, verify_ssl=config.JIRA_VERIFY_SSL)
-    glpi = GlpiClient(config.GLPI_URL, config.GLPI_APP_TOKEN, config.GLPI_USER_TOKEN, verify_ssl=config.GLPI_VERIFY_SSL)
+    glpi = GlpiClient(
+        config.GLPI_URL, 
+        config.GLPI_APP_TOKEN, 
+        user_token=config.GLPI_USER_TOKEN,
+        username=config.GLPI_USERNAME,
+        password=config.GLPI_PASSWORD,
+        verify_ssl=config.GLPI_VERIFY_SSL
+    )
     
     try:
         glpi.init_session()
         glpi.load_user_cache(recursive=True) 
         glpi.load_group_cache(recursive=True)
+        glpi.load_category_cache(recursive=True)
         
         # Status Mapping
         jira_statuses = jira.get_project_statuses(config.JIRA_PROJECT_KEY)
@@ -266,6 +296,16 @@ def main():
         total_processed = state["total_processed"]
         
         print(f"Resuming from {start_at}...")
+        
+        # --- Preparation: Ensure ITIL Categories exist for Jira Security Levels ---
+        if start_at == 0:
+            print("\n--- Preparation: Syncing Security Levels -> ITIL Categories ---")
+            sec_levels = jira.get_project_security_levels(config.JIRA_PROJECT_KEY)
+            for level in sec_levels:
+                level_name = level.get('name')
+                if level_name:
+                    glpi.get_or_create_category(level_name)
+            print("--- Preparation Complete ---\n")
         
         while True:
             jql = f"project = {config.JIRA_PROJECT_KEY} ORDER BY key ASC"
@@ -288,6 +328,7 @@ def main():
     except Exception as e:
         print(f"\nCRITICAL ERROR: {e}")
     finally:
+        save_missing_users_report()
         glpi.kill_session()
 
 def process_issue(jira, glpi, issue, status_mapping):
@@ -305,7 +346,12 @@ def process_issue(jira, glpi, issue, status_mapping):
     assignee_display = (fields.get('assignee') or {}).get('displayName', assignee_jira) or 'Unassigned'
     
     requester_id = glpi.get_user_id_by_name(reporter_jira)
+    if reporter_jira and not requester_id:
+        report_missing_user(reporter_jira, reporter_display)
+    
     assignee_id = glpi.get_user_id_by_name(assignee_jira)
+    if assignee_jira and not assignee_id:
+        report_missing_user(assignee_jira, assignee_display)
 
     # --- Map Status & Type ---
     status_jira = (fields.get('status') or {}).get('name', '').lower()
@@ -335,11 +381,73 @@ def process_issue(jira, glpi, issue, status_mapping):
     resolution = (fields.get('resolution') or {}).get('name', 'Unresolved')
     security = (fields.get('security') or {}).get('name', 'None')
     
+    # --- Participants ---
     participants_raw = fields.get(getattr(config, 'REQUEST_PARTICIPANTS_ID', ''))
+    participant_ids = []  # GLPI user IDs for observer mapping
     if isinstance(participants_raw, list):
-         participants = ", ".join([p.get('displayName', p.get('name', '')) for p in participants_raw])
+         participant_names = []
+         for p in participants_raw:
+             p_login = p.get('name', '')
+             p_display = p.get('displayName', p_login)
+             participant_names.append(p_display)
+             p_id = glpi.get_user_id_by_name(p_login)
+             if p_id:
+                 participant_ids.append(p_id)
+             elif p_login:
+                 report_missing_user(p_login, p_display)
+         participants = ", ".join(participant_names)
     else:
          participants = str(participants_raw) if participants_raw else "None"
+
+    # --- Approvers ---
+    approvers_raw = fields.get(getattr(config, 'APPROVERS_ID', ''))
+    if isinstance(approvers_raw, list):
+        approvers = ", ".join([a.get('displayName', a.get('name', '')) for a in approvers_raw])
+    elif isinstance(approvers_raw, dict):
+        approvers = approvers_raw.get('displayName', approvers_raw.get('name', 'N/A'))
+    else:
+        approvers = str(approvers_raw) if approvers_raw else "None"
+
+    # --- Past Approvals ---
+    past_approvals_html = ""
+    approval_data = fields.get(getattr(config, 'APPROVALS_ID', ''))
+    
+    if approval_data and isinstance(approval_data, list):
+        approval_rows = ""
+        for approval in approval_data:
+            if isinstance(approval, dict):
+                # Use finalDecision as the status (e.g. "approved", "declined")
+                decision = approval.get('finalDecision', '').capitalize()
+                approver_name = ''
+                approvers_list = approval.get('approvers', [])
+                if isinstance(approvers_list, list):
+                    names = []
+                    for apr in approvers_list:
+                        if isinstance(apr, dict):
+                            a_data = apr.get('approver', apr)
+                            names.append(a_data.get('displayName', a_data.get('name', 'Unknown')))
+                    approver_name = ', '.join(names)
+                
+                # Get date and strip time portion (e.g. "26/Jan/24 7:14 PM" -> "26/Jan/24")
+                created = approval.get('createdDate', {}).get('friendly', '') if isinstance(approval.get('createdDate'), dict) else ''
+                completed = approval.get('completedDate', {}).get('friendly', '') if isinstance(approval.get('completedDate'), dict) else ''
+                date_str = completed or created
+                date_only = date_str.split(' ')[0] if date_str else ''  # "26/Jan/24"
+                
+                approval_rows += f"<tr><td>{decision}</td><td>{approver_name}</td><td>{date_only}</td></tr>"
+        
+        if approval_rows:
+            past_approvals_html = f"""
+    <h3>Past Approvals</h3>
+    <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+        <tr>
+            <th style="background-color: #f2f2f2;">Status</th>
+            <th style="background-color: #f2f2f2;">Approver</th>
+            <th style="background-color: #f2f2f2;">Date</th>
+        </tr>
+        {approval_rows}
+    </table>
+    """
 
     req_type_data = fields.get(getattr(config, 'CUSTOMER_REQUEST_TYPE_ID', ''))
     request_type_name = "N/A"
@@ -400,6 +508,7 @@ def process_issue(jira, glpi, issue, status_mapping):
         <tr><td style="width: 30%;"><strong>Assignee</strong></td><td>{assignee_display}</td></tr>
         <tr><td><strong>Reporter</strong></td><td>{reporter_display}</td></tr>
         <tr><td><strong>Request Participants</strong></td><td>{participants}</td></tr>
+        <tr><td><strong>Approvers</strong></td><td>{approvers}</td></tr>
     </table>
     """
 
@@ -435,7 +544,7 @@ def process_issue(jira, glpi, issue, status_mapping):
     """
 
     # Add History after SLAs
-    details_block = f"{html_details}{html_service_req}{html_people}{html_dates}{html_slas}{html_history}<hr>"
+    details_block = f"{html_details}{html_service_req}{html_people}{past_approvals_html}{html_dates}{html_slas}{html_history}<hr>"
     
     # --- Format Description ---
     desc_linked = convert_jira_content(description, attachment_map)
@@ -449,6 +558,16 @@ def process_issue(jira, glpi, issue, status_mapping):
         "date": creation_date,
     }
     
+    # --- Priority Mapping (Jira Priority -> GLPI Urgency + Impact) ---
+    # Note: GLPI auto-calculates Priority from Urgency × Impact matrix
+    priority_name = (fields.get('priority') or {}).get('name', '')
+    urgency, impact = config.PRIORITY_MAPPING.get(
+        priority_name.lower(), config.DEFAULT_PRIORITY
+    )
+    ticket_args['urgency'] = urgency
+    ticket_args['impact'] = impact
+    print(f"  -> Priority '{priority_name}' -> Urgency={urgency}, Impact={impact}")
+    
     if glpi_status in [5, 6]:
         ticket_args["solvedate"] = resolution_date or update_date
     if glpi_status == 6:
@@ -457,17 +576,22 @@ def process_issue(jira, glpi, issue, status_mapping):
     if requester_id: ticket_args['_users_id_requester'] = requester_id
     if assignee_id: ticket_args['_users_id_assign'] = assignee_id
     
-    # --- Security Level Mapping (to GLPI Assigned Group) ---
+    # --- Observers (from Request Participants) ---
+    if participant_ids:
+        ticket_args['_users_id_observer'] = participant_ids
+        print(f"  -> Mapped {len(participant_ids)} participants as observers")
+    
+    # --- Security Level Mapping (to GLPI ITIL Category) ---
     security = fields.get('security')
     if security:
         sec_name = security.get('name')
         if sec_name:
-            group_id = glpi.get_group_id_by_name(sec_name)
-            if group_id:
-                ticket_args['_groups_id_assign'] = group_id
-                print(f"  -> Mapped Security Level '{sec_name}' to GLPI Group ID {group_id}")
+            cat_id = glpi.get_or_create_category(sec_name)
+            if cat_id:
+                ticket_args['itilcategories_id'] = cat_id
+                print(f"  -> Mapped Security Level '{sec_name}' to GLPI Category ID {cat_id}")
             else:
-                print(f"  [WARN] Security Level '{sec_name}' not found in GLPI Groups.")
+                print(f"  [WARN] Security Level '{sec_name}' could not be mapped to GLPI Category.")
         
     ticket_id = glpi.create_ticket(name=summary, content=full_desc, **ticket_args)
     
@@ -492,6 +616,7 @@ def process_issue(jira, glpi, issue, status_mapping):
             # Debug Author logic
             if not author_id:
                 print(f"    [WARN] Comment author '{author_jira}' not found in GLPI. Will be posted by API user.")
+                report_missing_user(author_jira, author_display)
             else:
                 print(f"    [DEBUG] Posting comment as User ID {author_id} ({author_display})")
                 

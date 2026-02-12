@@ -5,10 +5,12 @@ import mimetypes
 import time
 
 class GlpiClient:
-    def __init__(self, url, app_token, user_token=None, verify_ssl=False):
+    def __init__(self, url, app_token, user_token=None, username=None, password=None, verify_ssl=False):
         self.url = url
         self.app_token = app_token
         self.user_token = user_token
+        self.username = username
+        self.password = password
         self.verify_ssl = verify_ssl
         self.session_token = None
         self.headers = {
@@ -19,32 +21,67 @@ class GlpiClient:
         self.user_cache = {}
         # Group cache: name (lowercase) -> group_id
         self.group_cache = {}
+        # Category cache: name (lowercase) -> category_id
+        self.category_cache = {}
 
     def init_session(self):
-        """Initialize session using User Token."""
+        """Initialize session: Try User Token first, then Basic Auth."""
         endpoint = f"{self.url}/initSession"
-        headers = {
+        base_headers = {
             "App-Token": self.app_token,
             "Content-Type": "application/json"
         }
         
+        # 1. Try User Token
         if self.user_token:
-             headers["Authorization"] = f"user_token {self.user_token}"
-             print("Attempting authentication with User-Token...")
+            print("Attempting authentication with User-Token...")
+            headers = base_headers.copy()
+            headers["Authorization"] = f"user_token {self.user_token}"
+            
+            try:
+                response = requests.get(endpoint, headers=headers, verify=self.verify_ssl)
+                if response.ok:
+                    data = response.json()
+                    self.session_token = data.get("session_token")
+                    self.headers["Session-Token"] = self.session_token
+                    print(f"Session initialized (User-Token): {self.session_token}")
+                    return
+                else:
+                    print(f"User-Token failed (Status: {response.status_code}).")
+            except Exception as e:
+                print(f"User-Token connection error: {e}")
         
-        try:
-            response = requests.get(endpoint, headers=headers, verify=self.verify_ssl)
-            if not response.ok:
-                print(f"Failed to init session. Status: {response.status_code}")
-                print(f"Response Body: {response.text}")
-            response.raise_for_status()
-            data = response.json()
-            self.session_token = data.get("session_token")
-            self.headers["Session-Token"] = self.session_token
-            print(f"Session initialized: {self.session_token}")
-        except Exception as e:
-            print(f"Failed to init session: {e}")
-            raise
+        # 2. Fallback to Basic Auth
+        if self.username and self.password:
+            print(f"Attempting fallback to Basic Auth (User: {self.username})...")
+            import base64
+            auth_str = f"{self.username}:{self.password}"
+            b64_auth = base64.b64encode(auth_str.encode()).decode()
+            
+            headers = base_headers.copy()
+            headers["Authorization"] = f"Basic {b64_auth}"
+            
+            try:
+                response = requests.get(endpoint, headers=headers, verify=self.verify_ssl)
+                if not response.ok:
+                    print(f"Basic Auth failed. Status: {response.status_code}")
+                    print(f"Response Body: {response.text}")
+                response.raise_for_status()
+                
+                data = response.json()
+                self.session_token = data.get("session_token")
+                self.headers["Session-Token"] = self.session_token
+                print(f"Session initialized (Basic Auth): {self.session_token}")
+                return
+            except Exception as e:
+                print(f"Basic Auth connection error: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    print(f"Response Body: {e.response.text}")
+                raise
+        
+        # If here, failure
+        print("Error: Could not initialize session with any credentials.")
+        raise Exception("Authentication Failed")
 
     def kill_session(self):
         if not self.session_token: return
@@ -137,9 +174,91 @@ class GlpiClient:
 
     def get_group_id_by_name(self, group_name):
         if not group_name: return None
-        # Try both direct name and last part of hierarchy path if needed
-        # Or simple exact match
         return self.group_cache.get(group_name.lower())
+
+    # --- Category Cache ---
+    def load_category_cache(self, recursive=True):
+        """
+        Load ALL GLPI ITIL Categories into memory cache.
+        """
+        print("Loading GLPI ITIL Category Cache...")
+        endpoint = f"{self.url}/search/ITILCategory"
+        params = {
+            "range": "0-10000",
+            "forcedisplay[0]": "1",  # name
+            "forcedisplay[1]": "2",  # id
+            "forcedisplay[2]": "14", # completename
+        }
+        if recursive:
+            params["is_recursive"] = "1"
+        
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            response.raise_for_status()
+            
+            result = response.json()
+            data = result.get('data', [])
+            
+            if data:
+                for item in data:
+                    name = str(item.get('1', '')).lower().strip()
+                    completename = str(item.get('14', '')).lower().strip()
+                    cat_id = item.get('2')
+                    
+                    if name and cat_id:
+                        self.category_cache[name] = cat_id
+                    if completename and cat_id:
+                        self.category_cache[completename] = cat_id
+                        
+            print(f"-> Loaded {len(self.category_cache)} categories into cache.")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to load category cache: {e}")
+
+    def get_or_create_category(self, category_name):
+        """
+        Get a category ID by name. If not found, create it.
+        Created categories: is_incident=1, is_request=1, is_problem=0, is_change=0.
+        Returns category_id or None.
+        """
+        if not category_name:
+            return None
+        
+        # Check cache first
+        cat_id = self.category_cache.get(category_name.lower())
+        if cat_id:
+            return cat_id
+        
+        # Create new category
+        print(f"  [NEW] Creating ITIL Category '{category_name}'...")
+        endpoint = f"{self.url}/ITILCategory"
+        payload = {
+            "input": {
+                "name": category_name,
+                "is_incident": 1,
+                "is_request": 1,
+                "is_problem": 0,
+                "is_change": 0,
+            }
+        }
+        
+        try:
+            response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            response.raise_for_status()
+            result = response.json()
+            new_id = result.get('id')
+            if new_id:
+                self.category_cache[category_name.lower()] = new_id
+                print(f"  [NEW] Created Category '{category_name}' -> GLPI ID {new_id}")
+                return new_id
+            else:
+                print(f"  [ERROR] Category creation returned no ID: {result}")
+                return None
+        except Exception as e:
+            print(f"  [ERROR] Failed to create category '{category_name}': {e}")
+            if hasattr(e, 'response') and e.response:
+                print(f"  Response: {e.response.text}")
+            return None
 
     # --- Ticket Management ---
     def get_status_id_map(self):

@@ -24,6 +24,9 @@ GLPI_USER_TOKEN = "your_glpi_user_token"
 # - True: Verify using default system CAs
 # - "path/to/cert.pem": Verify using specific CA bundle
 GLPI_VERIFY_SSL = r"path/to/your/cert.pem"
+# Optional: Credentials for fallback Basic Auth (if User Token fails)
+GLPI_USERNAME = "your-glpi-username"
+GLPI_PASSWORD = "your-glpi-password"
 
 # Migration Settings
 BATCH_SIZE = 50 # Number of tickets to fetch per request (Safe default)
@@ -61,11 +64,29 @@ TYPE_MAPPING = {
 # Default if not found
 DEFAULT_TYPE = 2
 
+# Jira Priority -> GLPI Urgency, Impact Mapping
+# GLPI auto-calculates Priority from Urgency × Impact matrix (Setup > General > Assistance)
+# GLPI Scale: 1=Very low, 2=Low, 3=Medium, 4=High, 5=Very high
+# Format: 'jira_priority_name (lowercase)': (urgency, impact)
+PRIORITY_MAPPING = {
+    'next hour':            (5, 5),  # Very high
+    'next half-day':        (4, 4),  # High
+    'next business day':    (3, 3),  # Medium
+    'next 5 business day':  (2, 2),  # Low
+    'to schedule':          (1, 1),  # Very low
+}
+DEFAULT_PRIORITY = (3, 3)  # Medium fallback
+
 # Additional Custom Fields for Description Mapping
 CLASSIFICATION_ID = 'customfield_12010'
 REPORTER_DETAILS_ID = 'customfield_11710'
 REQUEST_PARTICIPANTS_ID = 'customfield_10911' # Request participants
 CUSTOMER_REQUEST_TYPE_ID = 'customfield_10912' # Service Desk Request Type
+APPROVERS_ID = 'customfield_11011' # Approvers (multi-user picker)
+APPROVALS_ID = 'customfield_10910' # Approvals (past approvals data)
+
+# Missing Users Report - tracks users not found in GLPI during migration
+MISSING_USERS_FILE = "missing_users.txt"
 
 # SLA Configuration: in case Jira has SLA integration
 # Custom Field IDs, use Inspect to get this value from Jira

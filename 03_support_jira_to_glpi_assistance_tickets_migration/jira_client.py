@@ -122,3 +122,73 @@ class JiraClient:
         except Exception as e:
             print(f"Failed to fetch project users: {e}")
             return []
+
+    def get_project_security_levels(self, project_key):
+        """
+        Get all security levels for a specific project.
+        1. Try: GET /rest/api/2/project/{projectKey}/securitylevel (requires 'Set Issue Security' permission)
+        2. Fallback: JQL scan of issues with 'level is not EMPTY' to discover levels from actual data.
+        Returns list of dicts with id, name.
+        """
+        # --- Method 1: Direct API ---
+        endpoint = f"{self.url}/rest/api/2/project/{project_key}/securitylevel"
+        try:
+            response = requests.get(endpoint, headers=self.headers, verify=self.verify_ssl)
+            response.raise_for_status()
+            data = response.json()
+            levels = data.get('levels', [])
+            if levels:
+                print(f"Found {len(levels)} security levels via API for project {project_key}.")
+                for lvl in levels:
+                    print(f"  - {lvl.get('name')} (ID: {lvl.get('id')})")
+                return levels
+        except Exception as e:
+            print(f"Security level API failed: {e}")
+        
+        # --- Method 2: JQL Scan Fallback ---
+        print(f"API returned 0 levels (likely permission issue). Scanning issues via JQL...")
+        return self._scan_security_levels_from_issues(project_key)
+
+    def _scan_security_levels_from_issues(self, project_key):
+        """
+        Fallback: discover security levels by scanning issues with JQL.
+        Uses 'level is not EMPTY' filter and collects unique security levels.
+        """
+        jql = f"project = {project_key} AND level is not EMPTY"
+        unique_levels = {}  # id -> {id, name}
+        start_at = 0
+        
+        try:
+            # First get total count
+            _, total = self.search_issues(jql, start_at=0, max_results=0)
+            print(f"  Found {total} issues with security levels. Scanning...")
+            
+            while start_at < total:
+                issues, _ = self.search_issues(jql, start_at=start_at, max_results=50)
+                if not issues:
+                    break
+                
+                for issue in issues:
+                    sec = issue.get('fields', {}).get('security')
+                    if sec:
+                        sec_id = sec.get('id')
+                        sec_name = sec.get('name')
+                        if sec_id and sec_name and sec_id not in unique_levels:
+                            unique_levels[sec_id] = {'id': sec_id, 'name': sec_name}
+                            print(f"  - Discovered: {sec_name} (ID: {sec_id})")
+                
+                start_at += len(issues)
+                # Early exit: if we have enough unique levels, stop scanning
+                # (After scanning 200 issues, new levels are unlikely)
+                if start_at >= 200 and len(unique_levels) > 0:
+                    print(f"  Scanned {start_at} issues, found {len(unique_levels)} unique levels. Stopping early.")
+                    break
+            
+            levels = list(unique_levels.values())
+            print(f"  Discovered {len(levels)} security levels via JQL scan.")
+            return levels
+            
+        except Exception as e:
+            print(f"  JQL scan failed: {e}")
+            return []
+
