@@ -5,10 +5,12 @@ import mimetypes
 import time
 
 class GlpiClient:
-    def __init__(self, url, app_token, user_token=None, verify_ssl=False):
+    def __init__(self, url, app_token, user_token=None, username=None, password=None, verify_ssl=False):
         self.url = url
         self.app_token = app_token
         self.user_token = user_token
+        self.username = username
+        self.password = password
         self.verify_ssl = verify_ssl
         self.session_token = None
         self.headers = {
@@ -19,35 +21,63 @@ class GlpiClient:
         self.user_cache = {}
 
     def init_session(self):
-        """Initialize session using User Token."""
+        """Initialize session: Try User Token first, then Basic Auth."""
         endpoint = f"{self.url}/initSession"
-        headers = {
+        base_headers = {
             "App-Token": self.app_token,
             "Content-Type": "application/json"
         }
         
+        # 1. Try User Token
         if self.user_token:
-             headers["Authorization"] = f"user_token {self.user_token}"
-             print("Attempting authentication with User-Token...")
-        else:
-            print("Error: No User Token provided.")
-            return
-
-        try:
-            response = requests.get(endpoint, headers=headers, verify=self.verify_ssl)
-            if not response.ok:
-                print(f"Failed to init session. Status: {response.status_code}")
-                print(f"Response Body: {response.text}")
-            response.raise_for_status()
-            data = response.json()
-            self.session_token = data.get("session_token")
-            self.headers["Session-Token"] = self.session_token
-            print(f"Session initialized: {self.session_token}")
-        except Exception as e:
-            print(f"Failed to init session: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"Response Body: {e.response.text}")
-            raise
+            print("Attempting authentication with User-Token...")
+            headers = base_headers.copy()
+            headers["Authorization"] = f"user_token {self.user_token}"
+            
+            try:
+                response = requests.get(endpoint, headers=headers, verify=self.verify_ssl)
+                if response.ok:
+                    data = response.json()
+                    self.session_token = data.get("session_token")
+                    self.headers["Session-Token"] = self.session_token
+                    print(f"Session initialized (User-Token): {self.session_token}")
+                    return
+                else:
+                    print(f"User-Token failed (Status: {response.status_code}).")
+            except Exception as e:
+                print(f"User-Token connection error: {e}")
+        
+        # 2. Fallback to Basic Auth
+        if self.username and self.password:
+            print(f"Attempting fallback to Basic Auth (User: {self.username})...")
+            import base64
+            auth_str = f"{self.username}:{self.password}"
+            b64_auth = base64.b64encode(auth_str.encode()).decode()
+            
+            headers = base_headers.copy()
+            headers["Authorization"] = f"Basic {b64_auth}"
+            
+            try:
+                response = requests.get(endpoint, headers=headers, verify=self.verify_ssl)
+                if not response.ok:
+                    print(f"Basic Auth failed. Status: {response.status_code}")
+                    print(f"Response Body: {response.text}")
+                response.raise_for_status()
+                
+                data = response.json()
+                self.session_token = data.get("session_token")
+                self.headers["Session-Token"] = self.session_token
+                print(f"Session initialized (Basic Auth): {self.session_token}")
+                return
+            except Exception as e:
+                print(f"Basic Auth connection error: {e}")
+                if hasattr(e, 'response') and e.response is not None:
+                    print(f"Response Body: {e.response.text}")
+                raise
+        
+        # If here, failure
+        print("Error: Could not initialize session with any credentials.")
+        raise Exception("Authentication Failed")
 
     def kill_session(self):
         """Kill the current session."""

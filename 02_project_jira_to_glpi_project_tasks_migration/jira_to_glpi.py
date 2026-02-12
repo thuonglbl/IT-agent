@@ -9,12 +9,8 @@ from jira_client import JiraClient
 from glpi_api import GlpiClient
 
 # --- Constants ---
-# Debug Mode
-# Set to True to fetch only 1 ticket and print detailed debug info
-# Set to False to run the full migration
-DEBUG = False
 STATE_FILE = config.STATE_FILE
-MAPPING_FILE = "migration_id_map.json"
+MAPPING_FILE = config.MAPPING_FILE
 
 def load_state():
     """Load the last processed index from state file."""
@@ -106,12 +102,60 @@ def format_description(issue, fields):
     components = ", ".join([c.get('name') for c in fields.get('components', [])])
     environment = fields.get('environment', '')
 
-    # Urgency Mapping (customfield_10031)
-    urgency_raw = (fields.get('customfield_10031') or {}).get('value', 'Medium')
-    urgency_map = {
-        'Low': 2, 'Medium': 3, 'High': 4, 'Very High': 5, 'Critical': 5, 'Blocker': 5, 'Serious': 4
-    }
-    urgency_val = urgency_map.get(urgency_raw, 3) # Default 3
+    # Custom Fields Mapping (Dynamic)
+    # Iterate over ALL fields in config.JIRA_CUSTOM_FIELDS
+    # and add non-empty values to the Details section.
+    custom_fields_html = ""
+    for field_key, field_id in config.JIRA_CUSTOM_FIELDS.items():
+        if not field_id:
+            continue
+        
+        raw_value = fields.get(field_id)
+        
+        # Skip empty values
+        if raw_value is None or raw_value == '' or raw_value == [] or raw_value == {}:
+            continue
+        
+        # Format the label: "change_details" -> "Change Details"
+        label = field_key.replace("_", " ").title()
+        
+        # Extract display value based on type
+        display_value = ""
+        
+        if isinstance(raw_value, dict):
+            # Most Jira select fields return {value: "X", id: "Y"}
+            display_value = raw_value.get('value') or raw_value.get('name') or raw_value.get('displayName') or str(raw_value)
+        
+        elif isinstance(raw_value, list):
+            # Could be Sprint, Labels, or multi-select
+            parts = []
+            for item in raw_value:
+                if isinstance(item, dict):
+                    parts.append(item.get('value') or item.get('name') or item.get('displayName') or str(item))
+                elif isinstance(item, str):
+                    # Sprint special format: 'com.atlassian.greenhopper....[name=Sprint 1,id=1...]'
+                    sprint_match = re.search(r'name=([^,\]]+)', item)
+                    if sprint_match:
+                        parts.append(sprint_match.group(1))
+                    else:
+                        parts.append(item)
+                else:
+                    parts.append(str(item))
+            display_value = ", ".join(parts) if parts else ""
+        
+        elif isinstance(raw_value, (int, float)):
+            display_value = str(raw_value)
+        
+        elif isinstance(raw_value, str):
+            display_value = raw_value
+        
+        else:
+            display_value = str(raw_value)
+        
+        # Only add if we got a meaningful value
+        if display_value and display_value.strip():
+            custom_fields_html += f"<p><b>{label}:</b> {display_value}</p>"
+
 
     # Section 1: Header
     content_html = f"<p><b>Original Jira Key:</b> {key}</p>"
@@ -140,29 +184,17 @@ def format_description(issue, fields):
     
     if resolution: content_html += f"<p><b>Resolution:</b> {resolution}</p>"
     if security:   content_html += f"<p><b>Security Level:</b> {security}</p>"
-    if urgency_raw: content_html += f"<p><b>Urgency:</b> {urgency_raw}</p>"
     
+    # Standard Jira fields (not custom fields)
     if fix_versions:     content_html += f"<p><b>Fix Version/s:</b> {fix_versions}</p>"
     if affects_versions: content_html += f"<p><b>Affects Version/s:</b> {affects_versions}</p>"
     if components:       content_html += f"<p><b>Component/s:</b> {components}</p>"
     if labels:           content_html += f"<p><b>Labels:</b> {labels}</p>"
     if environment:      content_html += f"<p><b>Environment:</b> {environment}</p>"
 
-    # Sprint Mapping (customfield_10210)
-    # Format: [ 'com.atlassian.greenhopper.service.sprint.Sprint@...[name=Sprint 1,id=1...]' ]
-    sprint_raw_list = fields.get('customfield_10210')
-    if sprint_raw_list and isinstance(sprint_raw_list, list):
-        sprints = []
-        for s in sprint_raw_list:
-            if isinstance(s, str):
-                # Extract 'name=Value'
-                match = re.search(r'name=([^,\]]+)', s)
-                if match:
-                    sprints.append(match.group(1))
-        
-        if sprints:
-            sprint_str = ", ".join(sprints)
-            content_html += f"<p><b>Sprint:</b> {sprint_str}</p>"
+    # Add all custom fields with values (dynamic from config.JIRA_CUSTOM_FIELDS)
+    if custom_fields_html:
+        content_html += custom_fields_html
 
     # Section 5: Description
     content_html += "<hr><h3>Description</h3>"
@@ -322,7 +354,15 @@ def main():
     # 1. Init Connections
     try:
         jira = JiraClient(config.JIRA_URL, config.JIRA_PAT, verify_ssl=config.JIRA_VERIFY_SSL)
-        glpi = GlpiClient(config.GLPI_URL, config.GLPI_APP_TOKEN, config.GLPI_USER_TOKEN, verify_ssl=config.GLPI_VERIFY_SSL)
+        # Init GLPI Client with both User Token (Primary) and Basic Auth (Fallback)
+        glpi = GlpiClient(
+            config.GLPI_URL, 
+            config.GLPI_APP_TOKEN, 
+            user_token=config.GLPI_USER_TOKEN,
+            username=config.GLPI_USERNAME,
+            password=config.GLPI_PASSWORD,
+            verify_ssl=config.GLPI_VERIFY_SSL
+        )
         
         glpi.init_session()
         print("-> GLPI Connection: OK")
@@ -367,7 +407,8 @@ def main():
     jira_map = load_mapping()
     print(f"Loaded {len(jira_map)} existing ID mappings.")
 
-    jql = f"project = '{config.JIRA_PROJECT_KEY}' ORDER BY key ASC"
+    jql = config.JIRA_JQL
+    print(f"Using JQL: {jql}")
     
     try:
         # Get total count first
@@ -377,10 +418,10 @@ def main():
 
         while start_at < total_issues:
             # Determine max results based on Debug mode
-            fetch_limit = 1 if DEBUG else config.BATCH_SIZE
+            fetch_limit = config.BATCH_SIZE
             
-            if DEBUG:
-                print(f"\n[DEBUG] Fetching 1 ticket for testing...")
+            if config.DEBUG:
+                print(f"\n[DEBUG] Fetching 1 batch for testing...")
             else:
                 print(f"\nFetching batch: {start_at} to {start_at + fetch_limit} ...")
             
@@ -489,8 +530,9 @@ def main():
                 task_name = summary 
                 print(f"    -> Creating GLPI Project Task '{task_name}'...")
                 
-                # Urgency Mapping (customfield_10031) - For Task Field
-                urgency_raw = (fields.get('customfield_10031') or {}).get('value', 'Medium')
+                # Urgency Mapping - For Task Field
+                urgency_field_id = config.JIRA_CUSTOM_FIELDS.get("urgency")
+                urgency_raw = (fields.get(urgency_field_id) or {}).get('value', 'Medium') if urgency_field_id else 'Medium'
                 urgency_map = {'Low': 2, 'Medium': 3, 'High': 4, 'Very High': 5, 'Critical': 5, 'Blocker': 5, 'Serious': 4}
                 urgency_val = urgency_map.get(urgency_raw, 3)
 
@@ -623,7 +665,7 @@ def main():
             save_mapping(jira_map)
 
             # DEBUG 
-            if DEBUG:
+            if config.DEBUG:
                 print("[DEBUG] Stopping after test batch.")
                 break
             

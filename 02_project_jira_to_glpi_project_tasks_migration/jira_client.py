@@ -45,9 +45,24 @@ class JiraClient:
             raise
 
     def get_issue_count(self, jql):
-        """Get total number of issues for a JQL."""
-        issues, total = self.search_issues(jql, start_at=0, max_results=0)
-        return total
+        """Get total number of issues for a JQL (lightweight request)."""
+        endpoint = f"{self.url}/rest/api/2/search"
+        params = {
+            "jql": jql,
+            "startAt": 0,
+            "maxResults": 0,
+            "fields": ["key"]  # minimal field to reduce payload
+        }
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            if response.status_code != 200:
+                print(f"Jira Count Error ({response.status_code}): {response.text[:500]}")
+                response.raise_for_status()
+            data = response.json()
+            return data.get("total", 0)
+        except Exception as e:
+            print(f"Failed to get issue count: {e}")
+            raise
 
     def get_attachment_content(self, download_url):
         """Download attachment content."""

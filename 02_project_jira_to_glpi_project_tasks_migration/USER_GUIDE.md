@@ -85,7 +85,7 @@ You need a **Personal Access Token (PAT)** from your Jira Server.
 ### Jira Settings
 *   **JIRA_URL**: Your Jira URL in browser, including  '/jira' at the end.
 *   **JIRA_PAT**: Paste your Personal Access Token here.
-*   **JIRA_PROJECT_KEY**: The Key of the Project you want to migrate (look at the url in browser, it is the part after '/projects/').
+*   **JIRA_PROJECT_KEY** and **JIRA_JQL**: The Key of the Project you want to migrate (look at the url in browser, it is the part after '/projects/').
 
 ## 3. Configuration
 Open `config_example.py` in a text editor and update the variables with the values you obtained above then rename to `config.py`:
@@ -93,6 +93,12 @@ Open `config_example.py` in a text editor and update the variables with the valu
 ### Migration Settings
 *   **BATCH_SIZE**: Default is `50`. Adjust if you want to fetch more/less tickets per request.
 *   **STATE_FILE**: Default is "migration_state.json". This file is used to resume if the script is interrupted (lost internet, server down, etc). To start from the beginning, delete this file.
+*   **DEBUG**: `True` to fetch only **one batch** (size = `BATCH_SIZE`) for testing. `False` to run the full migration.
+*   **MAPPING_FILE**: Default is "jira_glpi_id_map.json". This file stores the mapping between Jira Keys (e.g., PROJ-123) and GLPI IDs. **Do not delete this file** if you plan to resume migration or run it in batches, as it is crucial for linking Sub-tasks to their Parent tickets correctly.
+
+### Jira Custom Fields
+*   **JIRA_CUSTOM_FIELDS**: A dictionary mapping Jira field names to their custom field IDs.
+*   **How to find IDs**: Go to your Jira Project Settings > Fields > select your current schema > on the Screens column, hover on the link "X screens". This will show you the custom field IDs for the fields in that screen.
 
 Navigate to **Administration** > **Users** to ensure all users available before running the script.
 
