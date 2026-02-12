@@ -138,3 +138,5 @@ If run fail, check file `migration_state.json` to see where the script stopped, 
 ## 7. Limitations
 *   **Ticket ID**: GLPI generates new IDs. The original Jira Key is preserved in the first message for reference.
 *   **Users**: cannot create or sync user. If a user is not found, a Warning is logged, and the field is left empty.
+*   **Last Update**: GLPI automatically updates this field when changes are made. The script cannot force a specific past date.
+*   **Time to Own**: GLPI calculates this based on SLAs and Business Rules. The script attempts to map it but GLPI's internal logic may override it.
