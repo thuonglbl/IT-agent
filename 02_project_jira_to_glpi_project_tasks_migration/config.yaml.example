@@ -1,0 +1,51 @@
+# Jira to GLPI Project Tasks Migration Configuration
+# Copy this file to config.yaml and update with your settings
+
+# Jira Configuration
+jira:
+  url: "https://your-jira-server.com"
+  pat: "YOUR_PERSONAL_ACCESS_TOKEN"
+  verify_ssl: false
+  project_key: "PROJ"
+  jql: "project = PROJ ORDER BY key ASC"  # JQL query for issues to migrate
+
+  # Custom Fields Mapping (80+ fields)
+  # Map custom field names to Jira field IDs (customfield_XXXXX)
+  custom_fields:
+    urgency: "customfield_10100"
+    change_details: "customfield_10101"
+    # Add more custom fields as needed...
+
+  # Color Mapping for Project States
+  color_map:
+    default: "#42526E"
+    blue: "#0052CC"
+    green: "#00875A"
+    yellow: "#FF991F"
+    red: "#DE350B"
+    # Add more colors as needed...
+
+# GLPI Configuration
+glpi:
+  url: "https://your-glpi-server.com/api.php/v1"
+  app_token: "YOUR_APP_TOKEN"
+  user_token: "YOUR_USER_TOKEN"  # Optional: will try Basic Auth if not provided
+  username: null                  # Optional: for Basic Auth fallback
+  password: null                  # Optional: for Basic Auth fallback
+  verify_ssl: false
+  project_name: "Your GLPI Project Name"
+
+# Migration Settings
+migration:
+  batch_size: 50
+  debug: false  # Set to true to process only 1 batch for testing
+  state_file: "migration_state.json"
+  mapping_file: "jira_glpi_mapping.json"
+
+# Optional: Logging Configuration
+logging:
+  level: "INFO"          # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  console: true
+  file: false
+  file_path: "logs/migration_{timestamp}.log"
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

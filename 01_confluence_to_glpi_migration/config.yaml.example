@@ -1,0 +1,19 @@
+# Confluence to GLPI Knowledge Base Migration - Project-Specific Configuration
+# Copy this file to config.yaml and update with your settings
+#
+# IMPORTANT: Common settings (GLPI credentials, Jira credentials, logging)
+# are in ../common/config.yaml - update that file first!
+# This file only contains settings unique to Confluence migration.
+
+# Confluence Export Configuration
+confluence:
+  export_dir: "./confluence-export"  # Path to Confluence HTML export directory
+
+# Cleanup Settings
+cleanup:
+  default_category: "your_glpi_root_category_name"  # Name of root category in GLPI
+
+# Browser Session Settings (for fetching logs from GLPI web interface)
+browser:
+  cookie_name: "glpi_session_cookie_name"
+  cookie_value: "your_session_cookie_value"

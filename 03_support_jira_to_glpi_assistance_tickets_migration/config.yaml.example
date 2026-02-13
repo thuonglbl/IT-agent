@@ -1,0 +1,242 @@
+# ================================================================================
+# Jira to GLPI Migration Configuration
+# ================================================================================
+# Copy this file to config.yaml and update with your settings
+# Sensitive credentials can be overridden with environment variables
+
+# ===== Jira Configuration =====
+jira:
+  # URL of your Jira Server
+  url: "https://your-jira-server.com"
+
+  # Personal Access Token (PAT) for Jira authentication
+  # Can be overridden by JIRA_PAT environment variable
+  # Leave empty to use environment variable: export JIRA_PAT=your_token_here
+  pat: ""
+
+  # Project Key to migrate (e.g., SUPPORT, SERVICEDESK, etc.)
+  project_key: "SUPPORT"
+
+  # SSL Verification
+  # Options:
+  #   - true: Verify using default system CAs
+  #   - false: Disable verification (insecure, not recommended)
+  #   - "path/to/cert.pem": Verify using specific CA bundle
+  verify_ssl: true
+
+
+# ===== GLPI Configuration =====
+glpi:
+  # URL of your GLPI API endpoint
+  url: "https://your-glpi-server.com/api.php/v1"
+
+  # App Token (API Client) - Required
+  # Can be overridden by GLPI_APP_TOKEN environment variable
+  # Get this from GLPI: Setup > General > API > Add API client
+  app_token: ""
+
+  # User Token (API Client) - Recommended
+  # Can be overridden by GLPI_USER_TOKEN environment variable
+  # Get this from your GLPI user profile: My Settings > Remote access keys
+  user_token: ""
+
+  # Username and Password (Fallback Basic Auth)
+  # Used if User Token fails or is not provided
+  username: ""
+  password: ""  # Can be overridden by GLPI_PASSWORD environment variable
+
+  # SSL Verification
+  # Options:
+  #   - true: Verify using default system CAs
+  #   - false: Disable verification (insecure, not recommended)
+  #   - "glpi.pem": Verify using specific certificate file
+  verify_ssl: "glpi.pem"
+
+
+# ===== Migration Runtime Settings =====
+migration:
+  # Number of tickets to process per batch
+  # State is saved after each batch for resumability
+  batch_size: 50
+
+  # State file to track migration progress
+  # Allows resuming after interruption (network failure, system sleep, etc.)
+  state_file: "migration_state.json"
+
+  # Missing users report file
+  # Lists Jira users not found in GLPI during migration
+  missing_users_file: "missing_users.txt"
+
+  # Debug Settings
+  debug:
+    # Set to true to process only 1 ticket then exit (for testing)
+    enabled: false
+
+    # Target specific ticket key (e.g., "SUPPORT-123")
+    # Set to null to process all tickets
+    # If set, only this ticket will be migrated (overrides enabled flag)
+    target_ticket_key: null
+
+
+# ===== Logging Configuration =====
+logging:
+  # Log level: DEBUG | INFO | WARNING | ERROR | CRITICAL
+  # Can be overridden by LOG_LEVEL environment variable
+  # DEBUG: Detailed field extraction, mapping logic
+  # INFO: Ticket processing start/end, batch progress
+  # WARNING: Missing users, fallback mappings
+  # ERROR: API failures, validation errors
+  # CRITICAL: Fatal errors that stop migration
+  level: "INFO"
+
+  # Enable console output
+  console: true
+
+  # Enable file logging
+  file: true
+
+  # Log file path (supports {timestamp} placeholder)
+  # Timestamp format: YYYYMMDD_HHMMSS
+  file_path: "logs/migration_{timestamp}.log"
+
+  # Log format (Python logging format string)
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+
+# ===== Field Mappings =====
+mappings:
+  # ===== Status Mapping =====
+  # Map Jira status names (lowercase) to GLPI status IDs
+  # GLPI Statuses (fixed, cannot be changed):
+  #   1 = New (To be processed)
+  #   2 = Processing (Assigned)
+  #   3 = Processing (Planned)
+  #   4 = Pending
+  #   5 = Solved
+  #   6 = Closed
+  #   10 = Approval
+  status:
+    assigned: 2
+    in progress: 3
+    resolved: 5
+    on hold: 4
+    closed: 6
+    submitted: 10
+    waiting for approval: 1
+    open: 1
+    planned: 3
+    delivered: 5
+    completed: 6
+    ready for delivery: 5
+
+  # Default status if Jira status not found in mapping
+  status_default: 3
+
+  # ===== Type Mapping =====
+  # Map Jira issue type names (lowercase) to GLPI ticket types
+  # GLPI Types: 1 = Incident, 2 = Request
+  type:
+    change: 2
+    incident: 1
+    support request: 2
+    rollout: 2
+
+  # Default type if Jira type not found in mapping
+  type_default: 2
+
+  # ===== Priority Mapping =====
+  # Map Jira priority names (lowercase) to GLPI [Urgency, Impact]
+  # GLPI auto-calculates Priority from Urgency × Impact matrix
+  # Scale: 1 = Very low, 2 = Low, 3 = Medium, 4 = High, 5 = Very high
+  # Format: priority_name: [urgency, impact]
+  priority:
+    next hour: [5, 5]           # Very high
+    next half-day: [4, 4]       # High
+    next business day: [3, 3]   # Medium
+    next 5 business day: [2, 2] # Low
+    to schedule: [1, 1]         # Very low
+
+  # Default priority [urgency, impact] if Jira priority not found
+  priority_default: [3, 3]
+
+  # ===== Classification to Location Mapping =====
+  # Map Jira Classification custom field values to GLPI Location names
+  # Check GLPI: Setup > Dropdowns > Common > Locations
+  # Use list_classifications.py to discover all classification values in Jira
+  classification_to_location:
+    CH: "CH"
+    VN: "VN"
+    ES: "ES"
+    MU: "MU"
+
+  # ===== Classification to Item Mapping =====
+  # Map Jira Classification values to GLPI Items (for ticket linking)
+  # Format: classification_value: [ItemType, ItemName]
+  # Supported ItemTypes:
+  #   - Business_Service: Assets > Business Service
+  #   - Software: Assets > Software
+  #   - Computer: Assets > Computers
+  classification_to_item:
+    # Business Services
+    Intranet: ["Business_Service", "SharePoint Intranet"]
+    Network: ["Business_Service", "Network Configuration"]
+    Internet: ["Business_Service", "Network Configuration"]
+    Project_Portal: ["Business_Service", "Project Monitoring Tool"]
+    SkillMatrix: ["Business_Service", "Project Monitoring Tool"]
+    Project_Space: ["Business_Service", "Project Space"]
+    ERP: ["Business_Service", "ERP"]
+    Firewall: ["Business_Service", "Network Configuration"]
+    CV_Tool: ["Business_Service", "CV Tool"]
+    ESS: ["Business_Service", "ESS"]
+    FCR: ["Business_Service", "FCR"]
+    Incident: ["Business_Service", "Incident"]
+    Office_Access: ["Business_Service", "Office Access"]
+    Oracle_DB: ["Business_Service", "ORACLE ERP"]
+    Oracle_HR: ["Business_Service", "ORACLE ERP"]
+    Oracle_Procurement: ["Business_Service", "ORACLE ERP"]
+    Oracle_Other: ["Business_Service", "ORACLE ERP"]
+    Other: ["Business_Service", "Other"]
+    PT_Tool: ["Business_Service", "PT Tool"]
+
+    # Software
+    Security: ["Software", "Windows Security"]
+    Teams: ["Software", "Microsoft Teams"]
+    Edge: ["Software", "Microsoft Edge"]
+    SharePoint: ["Software", "Sharepoint-app"]
+    Azure: ["Software", "Azure VPN Client"]
+    VPN: ["Software", "Ashwind VPN"]
+    ashwind: ["Software", "Ashwind VPN"]
+    Workstation: ["Software", "VMware Workstation"]
+    Email: ["Software", "Email and accounts"]
+    license: ["Software", "Add License in the manager platform"]
+
+
+# ===== Custom Field IDs =====
+# Jira custom field IDs (use browser Inspect tool to find these)
+# Format: customfield_XXXXX
+custom_fields:
+  # Classification field (e.g., CH, VN, ES, MU)
+  classification: "customfield_12010"
+
+  # Reporter details field (additional reporter information)
+  reporter_details: "customfield_11710"
+
+  # Request participants (multi-user field)
+  request_participants: "customfield_10911"
+
+  # Customer request type (Service Desk request type)
+  customer_request_type: "customfield_10912"
+
+  # Approvers (multi-user picker)
+  approvers: "customfield_11011"
+
+  # Approvals (past approvals data)
+  approvals: "customfield_10910"
+
+  # SLA Fields (if Jira has SLA integration)
+  # These fields track SLA metrics like time to assign, time to resolve, etc.
+  sla_fields:
+    - "customfield_11512"  # Time to assign
+    - "customfield_11515"  # In Progress
+    - "customfield_11514"  # In progress To Fixed
+    - "customfield_12310"  # Approval expiry

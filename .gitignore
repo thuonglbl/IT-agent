@@ -14,6 +14,7 @@ venv/
 
 # Project Sensitive Config
 config.py
+config.yaml
 *.pem
 *.key
 *.log
@@ -22,3 +23,6 @@ config.py
 migration_state.json
 migration_state_tickets.json
 jira_glpi_id_map.json
+
+# Claude Code
+.claude/

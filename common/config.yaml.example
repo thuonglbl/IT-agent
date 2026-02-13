@@ -1,0 +1,37 @@
+# Common Configuration for All Migration Projects
+# Copy this file to config.yaml and update with your settings
+#
+# This file contains shared settings used by all migration folders:
+# - 01_confluence_to_glpi_migration
+# - 02_project_jira_to_glpi_project_tasks_migration
+# - 03_support_jira_to_glpi_assistance_tickets_migration
+#
+# Each migration folder has its own config.yaml for project-specific settings.
+
+# GLPI Configuration
+glpi:
+  url: "https://your-glpi-server.com/api.php/v1"
+  app_token: "YOUR_GLPI_APP_TOKEN"
+  user_token: "YOUR_GLPI_USER_TOKEN"
+  username: "your_username"  # Optional: for Basic Auth fallback
+  password: "your_password"  # Optional: for Basic Auth fallback
+  verify_ssl: "common/glpi.pem"  # Path to SSL certificate, or false to disable
+
+# Jira Configuration
+jira:
+  url: "https://your-jira-server.com"
+  pat: "YOUR_JIRA_PERSONAL_ACCESS_TOKEN"
+  verify_ssl: true  # Or path to certificate, or false to disable
+
+# Migration Settings (defaults for all migrations)
+migration:
+  batch_size: 50  # Number of items to fetch per API request
+  debug: false    # Set to true to process only 1 item for testing
+
+# Logging Configuration
+logging:
+  level: "INFO"          # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  console: true          # Output logs to console
+  file: true             # Output logs to file
+  file_path: "logs/migration_{timestamp}.log"
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
