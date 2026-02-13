@@ -22,7 +22,7 @@ IT-agent/
 └── 03_support_jira_to_glpi_assistance_tickets_migration/  # Migration 3: Tickets
 ```
 
-**Note:** Migrations are numbered to indicate recommended execution order, following industry best practices (similar to Django/Alembic migrations).
+**Note:** Migrations are numbered for organization. Each migration is independent and can be run in any order based on your needs.
 
 ## Roadmap & Milestones
 
@@ -55,17 +55,16 @@ cp config.yaml.example config.yaml
 # Edit config.yaml with migration-specific settings
 ```
 
-### 2. Run Individual Migration
+### 2. Run Migration
 
 ```bash
-cd 01_confluence_to_glpi_migration
-python main.py
-```
+# Choose the migration you need to run
+cd 01_confluence_to_glpi_migration  # OR
+cd 02_project_jira_to_glpi_project_tasks_migration  # OR
+cd 03_support_jira_to_glpi_assistance_tickets_migration
 
-### 3. Run All Migrations in Sequence
-
-```bash
-python run_all_migrations.py
+# Run the migration
+python main.py  # (or migrate_support_tickets.py for folder 03, jira_to_glpi.py for folder 02)
 ```
 
 ## Configuration System

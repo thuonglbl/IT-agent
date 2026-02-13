@@ -1,16 +1,44 @@
-# User Guide: Jira to GLPI Migration Script (API Mode)
+# User Guide: Jira Projects to GLPI Project Tasks Migration (API Mode)
 
-This script automates the migration of Jira Issues (Tickets) to GLPI Projects (Tickets) via the REST API. It uses the Jira API to fetch issues and the GLPI API to create tickets, ensuring a robust migration even for large datasets (thousands or millions of tickets) through batch processing and resume capability.
+This script automates the migration of Jira Issues to GLPI Project Tasks via the REST API. It uses the Jira API to fetch issues and the GLPI API to create project tasks, ensuring a robust migration even for large datasets through batch processing and resume capability.
 
 ## 1. Directory Structure
 
-Inside the `02_jira_to_glpi_migration` folder, you will find:
-- `config.py`: Configuration file (Important).
-- `jira_to_glpi.py`: Main script to execute the migration.
-- `jira_client.py`: Jira API client library with pagination support.
-- `glpi_api.py`: GLPI API client library (enhanced for Tickets).
-- `requirements.txt`: Required Python packages.
-- `migration_state.json`: Auto-generated file to track progress (Resume capability).
+Inside the `02_project_jira_to_glpi_project_tasks_migration` folder, you will find:
+
+```
+02_project_jira_to_glpi_project_tasks_migration/
+├── config.yaml.example         # Template configuration (copy to config.yaml)
+├── config.yaml                 # Your configuration (create from example)
+├── jira_to_glpi.py             # Main migration script
+├── import_ldap_playwright.py   # Helper: import LDAP users to GLPI
+├── requirements.txt            # Python dependencies
+├── migration_state.json        # Auto-generated progress tracker
+└── jira_glpi_id_map.json       # Auto-generated ID mapping (DO NOT DELETE)
+```
+
+**Common Library** (shared across all migrations):
+```
+common/
+├── clients/
+│   ├── glpi_client.py          # GLPI API client (Project/Task operations)
+│   └── jira_client.py          # Jira API client with pagination
+├── config/
+│   ├── loader.py               # Multi-format config loader (YAML + ENV)
+│   └── validator.py            # Configuration validation
+├── utils/
+│   ├── dates.py                # Date parsing/formatting utilities
+│   ├── html_builder.py         # HTML content builders
+│   └── state_manager.py        # Migration state persistence
+├── cache/
+│   └── user_cache.py           # User caching for O(1) lookups
+└── logging/
+    └── logger.py               # Structured logging
+```
+
+**Configuration Files**:
+- `common/config.yaml`: Shared credentials (GLPI tokens, Jira PAT, logging, batch settings)
+- `02_project_jira_to_glpi_project_tasks_migration/config.yaml`: Project-specific settings (project key, JQL, custom fields, color map)
 
 ## 2. Prerequisites
 
@@ -65,15 +93,6 @@ We have provided a script `import_ldap_playwright.py` to automate this process (
     The script will launch a browser, login automatically (if credentials provided), and import users in batches. It includes auto-retry logic for network glitches and redirects.
 
 ### Jira Configuration (PAT)
-For the script to correctly map **Reporters** and **Assignees** to the GLPI Task Team, the users must exist in GLPI with the **same username** as in Jira.
-1.  **In GLPI**: Go to **Administration > Users**. Ensure all relevant users are created and their **Login** field is populated correctly.
-2.  **In Jira**: Check the user's username in their Profile or User Management.
-3.  **Note**: If a user is not found in GLPI (by Login name), the script will log a `[WARN]` and skip adding them to the team, but the task will still be created.
-
-### GLPI Configuration (API & Tokens)
-Refer to USER_GUIDE.md in 01_confluence_to_glpi_migration folder for detailed instructions.
-
-### Jira Configuration (PAT)
 You need a **Personal Access Token (PAT)** from your Jira Server.
 1.  Log in to Jira.
 2.  Click on your Profile Picture (top right) > **Profile**.
@@ -82,29 +101,117 @@ You need a **Personal Access Token (PAT)** from your Jira Server.
 5.  Give it a name and set Expiry date.
 6.  **Copy the token** and save in safe place since you won't be able to see it again.
 
-### Jira Settings
-*   **JIRA_URL**: Your Jira URL in browser, including  '/jira' at the end.
-*   **JIRA_PAT**: Paste your Personal Access Token here.
-*   **JIRA_PROJECT_KEY** and **JIRA_JQL**: The Key of the Project you want to migrate (look at the url in browser, it is the part after '/projects/').
+### GLPI Configuration (API & Tokens)
+Refer to [USER_GUIDE.md](../01_confluence_to_glpi_migration/USER_GUIDE.md) in folder 01 for detailed GLPI API setup instructions.
 
-## 3. Configuration
-Open `config_example.py` in a text editor and update the variables with the values you obtained above then rename to `config.py`:
+## 3. Configuration Setup
 
-### Migration Settings
-*   **BATCH_SIZE**: Default is `50`. Adjust if you want to fetch more/less tickets per request.
-*   **STATE_FILE**: Default is "migration_state.json". This file is used to resume if the script is interrupted (lost internet, server down, etc). To start from the beginning, delete this file.
-*   **DEBUG**: `True` to fetch only **one batch** (size = `BATCH_SIZE`) for testing. `False` to run the full migration.
-*   **MAPPING_FILE**: Default is "jira_glpi_id_map.json". This file stores the mapping between Jira Keys (e.g., PROJ-123) and GLPI IDs. **Do not delete this file** if you plan to resume migration or run it in batches, as it is crucial for linking Sub-tasks to their Parent tickets correctly.
+This project uses **two-level configuration inheritance**:
+1. **Common config** (`common/config.yaml`): Shared GLPI/Jira credentials, batch size, logging
+2. **Folder config** (`02_project_jira_to_glpi_project_tasks_migration/config.yaml`): Project-specific settings
 
-### Jira Custom Fields
-*   **JIRA_CUSTOM_FIELDS**: A dictionary mapping Jira field names to their custom field IDs.
-*   **How to find IDs**: Go to your Jira Project Settings > Fields > select your current schema > on the Screens column, hover on the link "X screens". This will show you the custom field IDs for the fields in that screen.
+### Step 1: Configure Common Settings
 
-Navigate to **Administration** > **Users** to ensure all users available before running the script.
+Copy and edit the common configuration:
+```bash
+cd common
+cp config.yaml.example config.yaml
+```
 
-Navigate to **Administration** > **Rules** to find relevant rules affect project tasks, disable them temporarily to avoid overwriting before running the script.
+Open `common/config.yaml` and update:
+```yaml
+glpi:
+  url: "https://your-glpi-server.com/api.php/v1"
+  app_token: "YOUR_GLPI_APP_TOKEN"
+  user_token: "YOUR_GLPI_USER_TOKEN"
+  username: "your_username"                # Optional: Basic Auth fallback
+  password: "your_password"                # Optional: Basic Auth fallback
+  verify_ssl: "common/glpi.pem"            # Path to SSL cert, or true/false
 
-Navigate to **Setup** > **Plugins** to find relevant plugins affect login, disable them temporarily to avoid authentication issues before running the script.
+jira:
+  url: "https://your-jira-server.com"
+  pat: "YOUR_JIRA_PERSONAL_ACCESS_TOKEN"
+  verify_ssl: true
+
+migration:
+  batch_size: 50                           # Tasks per batch
+  debug: false                             # Set true to process only 1 batch
+
+logging:
+  level: "INFO"
+  console: true
+  file: true
+  file_path: "logs/migration_{timestamp}.log"
+```
+
+**Debug Mode**:
+- `debug: false` → Process all tasks (full migration)
+- `debug: true` → Process only 1 batch (batch_size tasks) for testing
+
+### Step 2: Configure Project-Specific Settings
+
+Copy and edit the folder configuration:
+```bash
+cd 02_project_jira_to_glpi_project_tasks_migration
+cp config.yaml.example config.yaml
+```
+
+Open `config.yaml` and update:
+
+**Jira Settings**:
+```yaml
+jira:
+  project_key: "MYPROJECT"                 # Your Jira project key (from browser URL)
+  jql: "project = MYPROJECT ORDER BY key ASC"
+
+  custom_fields:
+    answer: customfield_10082
+    approvers: customfield_11011
+    # ... (87 custom fields total)
+```
+
+**GLPI Settings**:
+```yaml
+glpi:
+  project_name: "My GLPI Project Name"     # Must match exactly in GLPI
+```
+
+**Migration Settings**:
+```yaml
+migration:
+  state_file: "migration_state.json"
+  mapping_file: "jira_glpi_id_map.json"    # DO NOT DELETE - crucial for sub-task linkage
+```
+
+**Color Mapping** (Jira → GLPI):
+```yaml
+jira:
+  color_map:
+    success: "#00875A"      # Green
+    inprogress: "#0052CC"   # Blue
+    default: "#42526E"      # Gray
+```
+
+### Finding Jira Custom Field IDs
+
+To find custom field IDs:
+1. Go to Jira Project Settings > Fields
+2. Select your current schema
+3. Hover over "X screens" link in the Screens column
+4. Note the `customfield_XXXXX` ID from the URL
+
+**Pre-Migration Checklist**:
+- [ ] Navigate to **Administration** > **Users** to ensure all users are imported
+- [ ] Navigate to **Administration** > **Rules** to find rules affecting project tasks - disable temporarily to avoid auto-actions
+- [ ] Navigate to **Setup** > **Plugins** to find authentication plugins - disable temporarily if they interfere with API login
+
+**Environment Variables** (Optional):
+Override sensitive credentials without editing files:
+```cmd
+set JIRA_PAT=your_token_here
+set GLPI_USER_TOKEN=your_token_here
+python jira_to_glpi.py
+```
 
 ## 4. Running the Migration
 
