@@ -1,0 +1,68 @@
+# ================================================================================
+# Jira Projects to GLPI Project Tasks Migration - Project-Specific Configuration
+# ================================================================================
+# IMPORTANT: Common settings (GLPI credentials, Jira credentials, logging)
+# are in ../common/config.yaml - update that file first!
+# This file only contains settings unique to project task migration.
+
+# ===== Jira Configuration (Project-Specific) =====
+jira:
+  # Project Key to migrate (in URL, after projectKey=)
+  project_key: "MYPROJECT"
+
+  # JQL query for issues to migrate
+  jql: "project = MYPROJECT ORDER BY key ASC"
+
+  # Custom Fields Mapping
+  # Map custom field names to Jira field IDs (customfield_XXXXX)
+  # Go to Project Settings > Fields > select schema > hover on "X screens" to get IDs
+  custom_fields:
+    # Common Agile Fields
+    story_points: customfield_10010
+    acceptance_criteria: customfield_10020
+    scrum_team: customfield_10030
+    sprint: customfield_10040
+    epic_link: customfield_10050
+
+    # Risk & Priority
+    risk_level: customfield_10100
+    business_value: customfield_10110
+    severity: customfield_10120
+    root_cause: customfield_10130
+
+    # Dates
+    target_start_date: customfield_10200
+    target_end_date: customfield_10210
+    actual_start_date: customfield_10220
+    actual_end_date: customfield_10230
+
+    # External References
+    external_ticket_id: customfield_10300
+    legacy_project_code: customfield_10310
+    customer_name: customfield_10320
+
+    # People
+    approvers: customfield_10400
+    qa_owner: customfield_10410
+    business_analyst: customfield_10420
+
+  # Color Mapping for Project States
+  # Jira API returns color names (success, inprogress, default), GLPI expects hex values
+  color_map:
+    success: "#00875A"      # Green
+    inprogress: "#0052CC"   # Blue
+    default: "#42526E"      # Gray
+
+# ===== GLPI Configuration (Project-Specific) =====
+glpi:
+  # Target project name in GLPI (must match exactly or be found via search)
+  project_name: "My GLPI Project Name"
+
+# Migration Settings (Project-Specific)
+migration:
+  # State file to track migration progress
+  state_file: "migration_state.json"
+
+  # ID mapping file for sub-task to parent task linkage
+  # DO NOT delete this file - it stores Jira Key → GLPI ID mappings
+  mapping_file: "jira_glpi_id_map.json"

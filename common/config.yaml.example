@@ -1,0 +1,30 @@
+# Common Configuration for All Migration Projects
+# This file contains shared GLPI and Jira settings used across all migrations
+
+# GLPI Configuration (Shared)
+glpi:
+  url: "https://your-glpi-server.com/api.php/v1"
+  app_token: "YOUR_GLPI_APP_TOKEN"
+  user_token: "YOUR_GLPI_USER_TOKEN"
+  username: "your_username"  # Optional: for Basic Auth fallback
+  password: "your_password"  # Optional: for Basic Auth fallback
+  verify_ssl: "path_to_ssl_certificate"  # Path to SSL certificate, or false to disable
+
+# Jira Configuration (Shared)
+jira:
+  url: "https://your-jira-server.com"
+  pat: "YOUR_JIRA_PERSONAL_ACCESS_TOKEN"
+  verify_ssl: true  # Or path to certificate, or false to disable
+
+# Migration Settings (Shared Defaults)
+migration:
+  batch_size: 50  # Number of items to fetch per API request
+  debug: false    # Set to true to process only 1 batch (folder 01: pages, folder 02/03: tickets)
+
+# Logging Configuration (Shared)
+logging:
+  level: "INFO"          # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  console: true          # Output logs to console
+  file: true             # Output logs to file
+  file_path: "logs/migration_{timestamp}.log"
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

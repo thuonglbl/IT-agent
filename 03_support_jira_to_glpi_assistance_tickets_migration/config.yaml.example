@@ -1,0 +1,142 @@
+# ================================================================================
+# Jira Support Tickets to GLPI Assistance Migration - Project-Specific Configuration
+# ================================================================================
+# IMPORTANT: Common settings (GLPI credentials, Jira credentials, logging)
+# are in ../common/config.yaml - update that file first!
+# This file only contains settings unique to support ticket migration.
+
+# ===== Jira Configuration (Project-Specific) =====
+jira:
+  # Project Key to migrate (in URL, after projectKey=)
+  project_key: "SUPPORT"
+
+# ===== Migration Runtime Settings =====
+migration:
+  # State file to track migration progress
+  # Allows resuming after interruption (network failure, system sleep, etc.)
+  state_file: "migration_state.json"
+
+  # Missing users report file
+  # Lists Jira users not found in GLPI during migration
+  missing_users_file: "missing_users.txt"
+
+  # Debug: Target specific ticket key for testing (optional)
+  # Set to null to process all tickets (use common debug setting for batch control)
+  # If set (e.g., "SUPPORT-123"), only this ticket will be migrated
+  jira_debug_ticket_key: null
+
+# ===== Field Mappings =====
+mappings:
+  # ===== Status Mapping =====
+  # Map Jira status names (lowercase) to GLPI status IDs
+  # GLPI Statuses (fixed, cannot be changed):
+  #   1 = New (To be processed)
+  #   2 = Processing (Assigned)
+  #   3 = Processing (Planned)
+  #   4 = Pending
+  #   5 = Solved
+  #   6 = Closed
+  #   10 = Approval
+  status:
+    assigned: 2
+    in progress: 3
+    resolved: 5
+    on hold: 4
+    closed: 6
+    submitted: 10
+    waiting for approval: 1
+    open: 1
+    planned: 3
+    delivered: 5
+    completed: 6
+    ready for delivery: 5
+
+  # Default status if Jira status not found in mapping
+  status_default: 3
+
+  # ===== Type Mapping =====
+  # Map Jira issue type names (lowercase) to GLPI ticket types
+  # GLPI Types: 1 = Incident, 2 = Request
+  type:
+    change: 2
+    incident: 1
+    support request: 2
+    rollout: 2
+
+  # Default type if Jira type not found in mapping
+  type_default: 2
+
+  # ===== Priority Mapping =====
+  # Map Jira priority names (lowercase) to GLPI [Urgency, Impact]
+  # GLPI auto-calculates Priority from Urgency × Impact matrix
+  # Scale: 1 = Very low, 2 = Low, 3 = Medium, 4 = High, 5 = Very high
+  # Format: priority_name: [urgency, impact]
+  priority:
+    next hour: [5, 5]           # Very high
+    next half-day: [4, 4]       # High
+    next business day: [3, 3]   # Medium
+    next 5 business day: [2, 2] # Low
+    to schedule: [1, 1]         # Very low
+
+  # Default priority [urgency, impact] if Jira priority not found
+  priority_default: [3, 3]
+
+  # ===== Classification to Location Mapping =====
+  # Map Jira Classification custom field values to GLPI Location names
+  # Check GLPI: Setup > Dropdowns > Common > Locations
+  # Use list_classifications.py to discover all classification values in Jira
+  classification_to_location:
+    Location_A: "Building A"
+    Location_B: "Building B"
+    Remote: "Remote"
+
+  # ===== Classification to Item Mapping =====
+  # Map Jira Classification values to GLPI Items (for ticket linking)
+  # Format: classification_value: [ItemType, ItemName]
+  # Supported ItemTypes:
+  #   - Business_Service: Assets > Business Service
+  #   - Software: Assets > Software
+  #   - Computer: Assets > Computers
+  classification_to_item:
+    # Business Services
+    Intranet: ["Business_Service", "Intranet"]
+    Network: ["Business_Service", "Network Configuration"]
+    Project_Tool: ["Business_Service", "Project Management Tool"]
+    HR_System: ["Business_Service", "HR System"]
+    Finance: ["Business_Service", "Finance System"]
+    
+    # Software
+    Security: ["Software", "Antivirus"]
+    VPN: ["Software", "VPN Client"]
+    Office: ["Software", "Microsoft Office"]
+    Email: ["Software", "Outlook"]
+
+# ===== Custom Field IDs =====
+# Jira custom field IDs (use browser Inspect tool to find these)
+# Format: customfield_XXXXX
+custom_fields:
+  # Classification field (e.g., Location_A, Location_B)
+  classification: "customfield_10010"
+
+  # Reporter details field (additional reporter information)
+  reporter_details: "customfield_10020"
+
+  # Request participants (multi-user field)
+  request_participants: "customfield_10030"
+
+  # Customer request type (Service Desk request type)
+  customer_request_type: "customfield_10040"
+
+  # Approvers (multi-user picker)
+  approvers: "customfield_10050"
+
+  # Approvals (past approvals data)
+  approvals: "customfield_10060"
+
+  # SLA Fields (if Jira has SLA integration)
+  # These fields track SLA metrics like time to assign, time to resolve, etc.
+  sla_fields:
+    - "customfield_10100"  # Time to assign
+    - "customfield_10101"  # In Progress
+    - "customfield_10102"  # In progress To Fixed
+    - "customfield_10103"  # Approval expiry

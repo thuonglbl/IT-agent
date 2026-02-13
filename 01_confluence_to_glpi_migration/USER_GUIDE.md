@@ -12,19 +12,28 @@ This script automates the migration of HTML export files from Confluence to the 
     *   *Note: Ensure "Include comments" is checked if you want them.*
 6.  **Export**: Click **Export**.
 7.  **Download**: Once processing is complete, download the zip file.
-8.  **Extract**: Extract the zip file to a folder on your computer (e.g., `C:\Confluence-export`). This path will be used in `config.py`.
+8.  **Extract**: Extract the zip file to a folder on your computer (e.g., `C:\Confluence-export`). This path will be used in `config.yaml`.
     *   *Note: Export folder name has .html at the end, which is confusing, remove it.*
 
 ## 2. Directory Structure
 
 Inside the `01_confluence_to_glpi_migration` folder, you will find:
-- `config.py`: Configuration file (Important).
-- `test_curl.cmd`: Test login and connection to GLPI API before running the main script.
-- `main.py`: Main script to execute the migration.
-- `cleanup_category.py`: delete all documents the script created in case of error.
-- `glpi_api.py`: GLPI API client library.
-- `parser.py`: HTML parsing library.
-- `requirements.txt`: Required Python packages.
+
+```
+01_confluence_to_glpi_migration/
+├── cleanup_category.py         # Delete imported KB items (for rollback)
+├── config.yaml                 # Your configuration (create from example)
+├── config.yaml.example         # Template configuration (copy to config.yaml)
+├── css_styles.py               # Mimic Confluence CSS styles
+├── main.py                     # Main migration script
+├── parser.py                   # HTML parsing utilities
+├── requirements.txt            # Python dependencies
+└── test_curl.cmd               # Test GLPI API connection
+```
+
+**Configuration Files**:
+- `common/config.yaml`: Shared credentials (GLPI tokens, Jira PAT, logging settings)
+- `01_confluence_to_glpi_migration/config.yaml`: Folder-specific settings (export path, category names)
 
 ## 3. Prerequisites
 
@@ -61,21 +70,58 @@ You need an **App-Token** and a **User-Token** from GLPI.
     *   **App-Token**: Locate the **Application Token(app_token)** field. Click the **Regenerate** button if needed, and copy the token value.
 5.  **User-Token**: Go to **User Preference** (top right user icon) > **My Settings**. In Main tab, Passwords and access keys part, tick **Regenerate** and click **Save** to get your personal User-Token.
 
-### Update `config.py`
-Open `config_example.py` in a text editor and update the variables with the values you obtained above then rename to `config.py`:
-*   **GLPI_URL**: Paste the **Legacy API URL** (from Step 3).
-*   **APP_TOKEN**: Paste the **App-Token** (from Step 4).
-*   **USER_TOKEN**: Paste the **User-Token** (from Step 5).
-*   **EXPORT_DIR**: Paste the path to your extracted Confluence export folder (from Preparation Step 8).
-*   **VERIFY_SSL**: Configure SSL verification:
-    *   Set to `True` to use default system CAs.
-    *   Set to `r"C:\path\to\your\cert.pem"` to use a custom CA certificate (required for internal GLPI servers with self-signed or enterprise certs, contact your GLPI administrator to get the certificate).
-    *   Set to `False` to disable verification (insecure, not recommended).
+### Configuration Setup
+
+This project uses **two-level configuration inheritance**:
+1. **Common config** (`common/config.yaml`): Shared GLPI/Jira credentials, logging settings
+2. **Folder config** (`01_confluence_to_glpi_migration/config.yaml`): Confluence-specific settings
+
+#### Step 1: Configure Common Settings
+
+Copy and edit the common configuration:
+```bash
+cd common
+cp config.yaml.example config.yaml
+```
+
+Open `common/config.yaml` and update
+
+**SSL Certificate**:
+- Set `verify_ssl: true` to use default system CAs
+- Set `verify_ssl: "common/glpi.pem"` for custom certificate (contact GLPI admin for cert file)
+- Set `verify_ssl: false` to disable (insecure, not recommended)
+
+#### Step 2: Configure Folder-Specific Settings
+
+Copy and edit the folder configuration:
+```bash
+cd 01_confluence_to_glpi_migration
+cp config.yaml.example config.yaml
+```
+
+Open `config.yaml` and update:
+```yaml
+confluence:
+  export_dir: "C:\\Confluence-export"  # Path to extracted Confluence export (from Step 8)
+
+cleanup:
+  default_category: "Confluence KB"    # Root category name in GLPI
+```
+
+**Environment Variables** (Optional):
+Override sensitive credentials without editing files:
+```cmd
+set GLPI_USER_TOKEN=your_token_here
+set GLPI_APP_TOKEN=your_app_token_here
+python main.py
+```
+
+Navigate to **Setup** > **Plugins** to find relevant plugins affect login, disable them temporarily to avoid authentication issues before running the script.
 
 ## 4. Running the Migration
 
 ### Test Connection (Recommended)
-Before running the main migration, ensure your `config.py` is correct:
+Before running the main migration, ensure your configuration is correct:
 1.  Run the script: `python test_curl.py`.
 2.  If successful, you should see a session token or a 200 OK response.
 

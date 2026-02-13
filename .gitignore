@@ -14,9 +14,13 @@ venv/
 
 # Project Sensitive Config
 config.py
+config.yaml
 *.pem
 *.key
 *.log
 
 # Migration State
 migration_state.json
+migration_state_tickets.json
+jira_glpi_id_map.json
+missing_users.txt
