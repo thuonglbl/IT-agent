@@ -26,3 +26,13 @@ jira_glpi_id_map.json
 
 # Claude Code
 .claude/
+
+# MCP configuration (contains credentials)
+.mcp.json
+
+# BMAD Framework
+_bmad/
+_bmad-output/
+
+# Agent workflows
+.agent/
