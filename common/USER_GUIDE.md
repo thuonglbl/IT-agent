@@ -22,6 +22,7 @@ The `common/` library extracts and unifies code from all 3 migration folders:
 
 ```
 common/
+├── import_ldap_playwright.py   # LDAP user import automation (Playwright)
 ├── clients/                    # API client implementations
 │   ├── glpi_client.py         # Unified GLPI REST API v1 client
 │   └── jira_client.py         # Unified Jira REST API v2 client
@@ -34,7 +35,7 @@ common/
 │   └── user_tracker.py        # Missing users tracker
 ├── logging/                    # Logging setup
 │   └── logger.py              # Structured logging
-└── README.md                   # This file
+└── USER_GUIDE.md               # This file
 ```
 
 ---
@@ -620,6 +621,57 @@ common/tests/
 | API Clients | 5 (3 GLPI + 2 Jira) | 2 (1 GLPI + 1 Jira) | -60% |
 | Config Approaches | 3 different | 1 unified | Consistent |
 | Logging | 2 approaches | 1 structured | Consistent |
+
+---
+
+## LDAP User Import Automation
+
+The `import_ldap_playwright.py` script automates bulk LDAP user imports into GLPI using Playwright browser automation. This is a **prerequisite** before running any migration (folder 01, 02, or 03), as ticket/task assignment depends on users existing in GLPI.
+
+### Why This Script?
+
+GLPI's built-in LDAP import UI can only process a few users at a time. For large directories (1,000+ users), manual import is impractical. This script automates the entire process.
+
+### Prerequisites
+
+```bash
+pip install playwright
+playwright install chromium
+```
+
+### Configuration
+
+The script reads credentials from `common/config.yaml`:
+
+```yaml
+glpi:
+  url: "https://your-glpi-server.com/api.php/v1"
+  username: "your_username"    # Optional: prompted if not set
+  password: "your_password"    # Optional: prompted if not set
+```
+
+### Usage
+
+```bash
+# From project root
+python common/import_ldap_playwright.py
+```
+
+### Parameters (in-script)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `BATCH_SIZE` | `3` | Users per batch. Do NOT increase — GLPI cannot handle more |
+| `MAX_BATCHES` | `95` | Set to `1` for testing, `1000` for full run |
+
+### Process
+
+1. Launches Chromium browser (visible, not headless)
+2. Logs into GLPI automatically
+3. Navigates to LDAP import page
+4. Searches for users, selects batch, imports via Massive Actions
+5. Repeats until no more users found or MAX_BATCHES reached
+6. Includes auto-retry logic for network errors and redirects
 
 ---
 

@@ -1,10 +1,18 @@
 import time
 import getpass
+import os
+import sys
 from playwright.sync_api import sync_playwright
-import config
 
-# Configuration
-GLPI_URL = config.GLPI_URL.replace("/api.php/v1", "")
+# Ensure project root is in path for common imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from common.config.loader import load_config
+
+# Configuration - load from common/config.yaml
+_config = load_config(os.path.join(os.path.dirname(__file__), 'config.yaml'))
+_glpi = _config.get('glpi', {})
+
+GLPI_URL = _glpi.get('url', '').replace("/api.php/v1", "")
 LDAP_IMPORT_URL = f"{GLPI_URL}/front/ldap.import.php"
 LOGIN_URL = f"{GLPI_URL}/front/login.php"
 
@@ -22,8 +30,8 @@ def run():
     print("----------------------------------------")
     
     # Try to get credentials from config first
-    username = getattr(config, 'GLPI_USERNAME', None)
-    password = getattr(config, 'GLPI_PASSWORD', None)
+    username = _glpi.get('username', None)
+    password = _glpi.get('password', None)
 
     if not username:
         username = input("GLPI Username: ")

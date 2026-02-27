@@ -11,7 +11,6 @@ Inside the `02_project_jira_to_glpi_project_tasks_migration` folder, you will fi
 ├── config.yaml.example         # Template configuration (copy to config.yaml)
 ├── config.yaml                 # Your configuration (create from example)
 ├── jira_to_glpi.py             # Main migration script
-├── import_ldap_playwright.py   # Helper: import LDAP users to GLPI
 ├── requirements.txt            # Python dependencies
 ├── migration_state.json        # Auto-generated progress tracker
 └── jira_glpi_id_map.json       # Auto-generated ID mapping (DO NOT DELETE)
@@ -64,33 +63,8 @@ For the script to correctly map **Reporters** and **Assignees** to the GLPI Task
 
 #### Step 0: Import Users from LDAP
 Before running the migration, you must import all users from LDAP into GLPI.
-We have provided a script `import_ldap_playwright.py` to automate this process (since manual import is slow).
 
-**How to run it:**
-1.  **Install Browser Binaries** (Run once):
-    ```bash
-    # Note: 'playwright' library is installed via requirements.txt
-    playwright install chromium
-    ```
-
-2.  **Configuration (Recommended):**
-    Open `config.py` and ensure `GLPI_URL` is set to `http` if your server is NOT support SSL to avoid SSL redirect loops, if supported keep it as `https`.
-    
-    To automate login (optional), add your credentials to `config.py`:
-    ```python
-    # Add to config.py
-    GLPI_USERNAME = "your_username"
-    GLPI_PASSWORD = "your_password"
-    ```
-
-3.  **Run the script:**
-    Change MAX_BATCHES in import_ldap_playwright.py to 1 to debug, or set to 1000 for full run
-    ```bash
-    python import_ldap_playwright.py
-    ```
-    
-4.  **Process:**
-    The script will launch a browser, login automatically (if credentials provided), and import users in batches. It includes auto-retry logic for network glitches and redirects.
+See [common/USER_GUIDE.md](../common/USER_GUIDE.md#ldap-user-import-automation) for the LDAP import script and GLPI LDAP configuration guide.
 
 ### Jira Configuration (PAT)
 You need a **Personal Access Token (PAT)** from your Jira Server.

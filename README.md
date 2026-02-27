@@ -11,6 +11,7 @@ Migrate data from Atlassian to GLPI.
 ```
 IT-agent/
 ├── common/                    # Shared library (imported by all migrations)
+│   ├── import_ldap_playwright.py  # LDAP user import automation
 │   ├── clients/              # API clients (GLPI, Jira)
 │   ├── config/               # Configuration loader with inheritance
 │   ├── utils/                # Utilities (dates, state management)
@@ -55,7 +56,22 @@ cp config.yaml.example config.yaml
 # Edit config.yaml with migration-specific settings
 ```
 
-### 2. Run Migration
+### 2. Import LDAP Users (Required Before Any Migration)
+
+All migrations depend on users existing in GLPI for correct ticket/task assignment. You must import LDAP users first:
+
+```bash
+# Install Playwright (once)
+pip install playwright
+playwright install chromium
+
+# Run LDAP import
+python common/import_ldap_playwright.py
+```
+
+Before running the import, ensure your GLPI LDAP directory is properly configured (paged results enabled, correct connection filter). See [common/USER_GUIDE.md](common/USER_GUIDE.md#glpi-ldap-configuration-guide) for detailed setup instructions.
+
+### 3. Run Migration
 
 ```bash
 # Choose the migration you need to run
@@ -100,7 +116,7 @@ from common.clients.jira_client import JiraClient
 from common.utils.state_manager import StateManager
 ```
 
-**Documentation:** See [common/README.md](common/README.md)
+**Documentation:** See [common/USER_GUIDE.md](common/USER_GUIDE.md)
 
 **Benefits:**
 - ✅ -83% code duplication eliminated
@@ -120,7 +136,7 @@ from common.utils.state_manager import StateManager
 
 For questions or issues:
 1. Check migration-specific USER_GUIDE.md files
-2. Check [common/README.md](common/README.md) for library documentation
+2. Check [common/USER_GUIDE.md](common/USER_GUIDE.md) for library documentation
 3. Review logs in `logs/` directory
 
 ---
