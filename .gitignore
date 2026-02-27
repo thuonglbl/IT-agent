@@ -32,7 +32,9 @@ jira_glpi_id_map.json
 
 # BMAD Framework
 _bmad/
-_bmad-output/
+
+# Debug
+debug/
 
 # Agent workflows
 .agent/

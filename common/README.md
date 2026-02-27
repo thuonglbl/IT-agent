@@ -623,6 +623,86 @@ common/tests/
 
 ---
 
+## GLPI LDAP Configuration Guide
+
+This section documents the recommended LDAP configuration for importing users from Active Directory into GLPI. Proper LDAP setup is a **prerequisite** for all migrations, as ticket assignment and user matching depend on a complete user base in GLPI.
+
+### Problem: Missing Users
+
+If GLPI shows significantly fewer users than expected after LDAP import, the most likely cause is **Active Directory's MaxPageSize limit (default: 1,000)**. AD silently truncates non-paged LDAP query results.
+
+### Recommended LDAP Settings
+
+**Path:** Setup > Authentication > LDAP Directories > \<your directory\>
+
+#### Main Tab
+
+| Setting | Recommended Value | Notes |
+|---------|-------------------|-------|
+| Server | `ldap://your-dc-ip` | Use IP or FQDN of Domain Controller |
+| Port | `389` (or `636` for LDAPS) | 636 requires TLS certificate |
+| Connection Filter | See below | Must exclude disabled accounts |
+| BaseDN | `DC=yourDomain,DC=local` | Root of domain to cover all OUs |
+| Use bind | Yes | Required for AD |
+| RootDN | `service_account@domain.local` | Dedicated service account |
+| Login Field | `samaccountname` | Standard for AD |
+| Synchronization field | `objectguid` | Unique and persistent AD identifier |
+
+#### Connection Filter (Recommended)
+
+```
+(&(objectClass=user)(objectCategory=person))
+```
+
+This filter:
+- `objectClass=user` + `objectCategory=person` — selects real user accounts (excludes computers, groups)
+
+> **Note on disabled accounts:** Do NOT add `(!(userAccountControl:1.2.840.113556.1.4.803:=2))` to exclude disabled users if you are migrating data from external systems (e.g., Jira). Disabled users may still be assigned to tickets/tasks and must exist in GLPI for user matching to work correctly during migration.
+
+#### Advanced Information Tab
+
+| Setting | Recommended Value | Why |
+|---------|-------------------|-----|
+| **Use paged results** | **Yes** | **Critical.** Without this, AD limits results to 1,000 entries |
+| Page Size | `10000` | AD caps to its own MaxPageSize (default 1,000) per page regardless. Larger value reduces round-trips |
+| Timeout | `30` | Allows enough time for paged queries on large directories |
+| Maximum number of results | Unlimited | Do not artificially limit results |
+| Use TLS | Yes (recommended) | Encrypts LDAP traffic including bind credentials |
+
+### Entity Configuration
+
+**Path:** Administration > Entities > \<entity\> > Advanced Information
+
+| Setting | Recommended Value |
+|---------|-------------------|
+| LDAP Directory | **Default Server** |
+
+Ensure the entity points to the Default Server (which has the correct paged results configuration), not a local/secondary server.
+
+### Verification Steps
+
+After applying the configuration:
+
+1. **Test connection:** LDAP Directory > Test tab — all 5 checks should pass (TCP, BaseDN, URI, Bind, Search)
+2. **Import new users:** Administration > Users > LDAP Directory Link > Import New Users > Search with empty criteria
+3. **Verify count:** Total GLPI users should match your AD user count (minus disabled accounts)
+
+### Troubleshooting
+
+| Symptom | Likely Cause | Solution |
+|---------|-------------|----------|
+| Fewer users imported | Paged results not enabled | Set `Use paged results = Yes` |
+| "No results found" on import | All returned users already imported + paging off | Enable paged results to discover remaining users |
+| Import includes disabled accounts | Missing userAccountControl filter | Update Connection Filter to exclude flag 2 |
+| Timeout errors during import | Timeout too low for large directory | Increase Timeout to 30+ seconds |
+| Users not syncing to correct entity | Entity pointing to wrong LDAP server | Set entity LDAP Directory to Default Server |
+
+### Reference
+
+- Full investigation details: [PRD-glpi-ldap-user-import-fix.md](../_bmad-output/planning-artifacts/PRD-glpi-ldap-user-import-fix.md)
+
+---
+
 ## Future Enhancements
 
 1. **Add unit tests** for all modules
