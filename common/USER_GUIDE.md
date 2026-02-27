@@ -635,7 +635,7 @@ GLPI's built-in LDAP import UI can only process a few users at a time. For large
 ### Prerequisites
 
 ```bash
-pip install playwright
+pip install -r common/requirements.txt
 playwright install chromium
 ```
 

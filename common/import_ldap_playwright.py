@@ -1,11 +1,16 @@
-import time
-import getpass
 import os
 import sys
-from playwright.sync_api import sync_playwright
 
-# Ensure project root is in path for common imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# Fix: common/logging/ shadows stdlib logging. Remove script dir from path,
+# add project root instead so "common" is a proper package.
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir in sys.path:
+    sys.path.remove(_script_dir)
+sys.path.insert(0, os.path.abspath(os.path.join(_script_dir, '..')))
+
+import time
+import getpass
+from playwright.sync_api import sync_playwright
 from common.config.loader import load_config
 
 # Configuration - load from common/config.yaml
@@ -19,7 +24,7 @@ LOGIN_URL = f"{GLPI_URL}/front/login.php"
 # BATCH_SIZE = 3: GLPI can't handle more than 3 users at a time, so do not modify BATCH_SIZE
 # MAX_BATCHES = 1: set to 1 to debug, set to 1000 or similar for full run, depends on number of users
 BATCH_SIZE = 3
-MAX_BATCHES = 95
+MAX_BATCHES = 1
 
 def run():
     print("GLPI LDAP Import Automation (Playwright)")
@@ -282,8 +287,10 @@ def run():
             # Loop continues, re-loading the page and searching again
             
         print("Done.")
-        if input("Press Enter to close browser..."):
-             pass
+        try:
+            input("Press Enter to close browser...")
+        except EOFError:
+            pass
 
 if __name__ == "__main__":
     run()

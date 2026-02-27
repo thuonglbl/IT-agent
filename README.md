@@ -61,8 +61,8 @@ cp config.yaml.example config.yaml
 All migrations depend on users existing in GLPI for correct ticket/task assignment. You must import LDAP users first:
 
 ```bash
-# Install Playwright (once)
-pip install playwright
+# Install dependencies (once)
+pip install -r common/requirements.txt
 playwright install chromium
 
 # Run LDAP import
