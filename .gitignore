@@ -38,3 +38,4 @@ debug/
 
 # Agent workflows
 .agent/
+01_confluence_to_glpi_migration/confluence_contributors.csv
