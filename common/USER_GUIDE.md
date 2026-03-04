@@ -23,6 +23,7 @@ The `common/` library extracts and unifies code from all 3 migration folders:
 ```
 common/
 ├── import_ldap_playwright.py   # LDAP user import automation (Playwright)
+├── check_missing_users.py      # Pre-migration: find Jira users missing from GLPI
 ├── clients/                    # API client implementations
 │   ├── glpi_client.py         # Unified GLPI REST API v1 client
 │   └── jira_client.py         # Unified Jira REST API v2 client
@@ -171,7 +172,9 @@ content = jira.get_attachment_content("https://jira.example.com/attachment/12345
 **Key Methods:**
 ```python
 search_issues(jql, start_at, max_results)  # Pagination support
+search_issues_lightweight(jql, fields)     # Lightweight search (no changelog)
 get_issue_count(jql)                       # Lightweight count
+get_user(username)                         # Get user by login (returns key, name, displayName)
 get_attachment_content(url)                # Download attachments
 get_project_statuses(project_key)          # Status list
 get_project_issue_types(project_key)       # Issue types
@@ -672,6 +675,132 @@ python common/import_ldap_playwright.py
 4. Searches for users, selects batch, imports via Massive Actions
 5. Repeats until no more users found or MAX_BATCHES reached
 6. Includes auto-retry logic for network errors and redirects
+
+---
+
+## Check Missing Users (Pre-Migration Report)
+
+The `check_missing_users.py` script identifies Jira users that do not exist in GLPI **before** running any migration. For each missing user, it checks Active Directory to determine the reason (deleted, disabled, or active but not imported) and collects related Jira tickets.
+
+### Why Run This?
+
+Migrations assign tickets/tasks to users by matching Jira login names to GLPI users. If a user is missing from GLPI, the migration cannot assign the ticket correctly. Running this script first lets you:
+- Import missing users via LDAP before migration
+- Understand why certain users are missing (deleted from AD, disabled, etc.)
+- Decide how to handle each case
+
+### Prerequisites
+
+- GLPI session credentials configured in `common/config.yaml`
+- Jira PAT configured in `common/config.yaml`
+- `ldap3` Python package installed (optional, for AD status checking)
+
+```bash
+pip install ldap3
+```
+
+### Usage
+
+```bash
+cd common
+
+# Basic: scan one project
+python check_missing_users.py PROJ1
+
+# Multiple projects
+python check_missing_users.py PROJ1 PROJ2
+
+# Skip issue scan (faster, only checks assignable users)
+python check_missing_users.py PROJ1 --skip-issues
+
+# Custom output file and batch size
+python check_missing_users.py PROJ1 -o report.txt --batch-size 50
+```
+
+### CLI Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `project_keys` | (required) | One or more Jira project keys |
+| `-o`, `--output` | `missing_users.txt` | Output file path |
+| `--batch-size` | `100` | Issues per API page during scan |
+| `--skip-issues` | off | Only check assignable users (skip issue assignee/reporter scan) |
+
+### How It Works
+
+1. **Collect Jira users** from two sources:
+   - **Assignable users** — via Jira project assignable API
+   - **Issue assignees/reporters** — by scanning all project issues (unless `--skip-issues`)
+2. **Compare against GLPI** — check each Jira user against GLPI user cache
+3. **Connect to Active Directory** — auto-detects LDAP config from GLPI API (`GET /AuthLDAP`), binds with GLPI credentials
+4. **Check AD status** for each missing user:
+   - Search AD by `sAMAccountName` matching the Jira login
+   - If not found, retry with the Jira `key` field (handles renamed users, e.g. `1234567890` -> key `abc`)
+   - Report reason: `Deleted from AD`, `Disabled in AD`, or `Active in AD but not in GLPI`
+5. **Generate TSV report** with 5 columns
+
+### Report Format
+
+The output is a tab-separated file with 5 columns:
+
+```
+Login Name	Jira Key	Full Name	Reason	Related Tickets
+```
+
+| Column | Description |
+|--------|-------------|
+| **Login Name** | Jira login name (`name` field) |
+| **Jira Key** | Jira `key` field — helps identify renamed users (e.g. numeric login with real sAMAccountName in key) |
+| **Full Name** | Display name from Jira |
+| **Reason** | Why the user is missing from GLPI |
+| **Related Tickets** | Comma-separated issue keys where user appears as assignee or reporter |
+
+### Possible Reasons
+
+| Reason | Meaning | Action |
+|--------|---------|--------|
+| `Deleted from AD` | User account no longer exists in Active Directory | No action needed — user cannot be imported |
+| `Disabled in AD` | User account exists but is disabled (userAccountControl bit 2) | Can be imported if LDAP filter includes disabled accounts |
+| `Disabled in AD (sAMAccountName=<key>)` | Same as above, but found via Jira key (login differs from AD username) | Check if LDAP filter includes disabled accounts |
+| `Active in AD but not in GLPI` | User exists and is active in AD but not imported into GLPI | Run LDAP import to add this user |
+| `Active in AD as <key>, not in GLPI` | Same as above, found via Jira key | Run LDAP import using the AD username |
+| `Not in GLPI` | LDAP connection unavailable — cannot determine AD status | Install `ldap3` or check GLPI LDAP config |
+
+### Example Output
+
+```
+$ cd common && python check_missing_users.py PROJ1
+
+Collecting users from project: PROJ1
+  [Assignable] 100 users from PROJ1
+  [Issues] Scanning 507 issues in PROJ1...
+    Scanned 507/507 issues, 304 unique users so far
+  [Issues] 304 unique users from issues in PROJ1
+
+Total unique Jira users collected: 374
+GLPI users in cache: 4176
+
+Checking against GLPI...
+  32 users not found in GLPI
+
+Fetching LDAP config from GLPI...
+  Connected to AD: ldap://IP as login@domain.local
+
+Checking AD status for 32 missing users...
+    [MISSING] 1234567890 (key=abc): Disabled in AD (sAMAccountName=abc)
+    [MISSING] xyz (key=xyz): Deleted from AD
+    ...
+
+[REPORT] 32 missing users written to missing_users.txt
+
+Done. 32 missing users found.
+```
+
+### LDAP Auto-Detection
+
+The script automatically fetches LDAP connection details from GLPI's API (`GET /AuthLDAP`) — no extra configuration needed. It derives the AD domain from the `basedn` field (e.g. `DC=domain,DC=local` -> `domain.local`) and binds with the GLPI `username` and `password` from `config.yaml`.
+
+If `ldap3` is not installed or the LDAP connection fails, the script still runs but reports all missing users with reason `Not in GLPI` instead of the specific AD status.
 
 ---
 

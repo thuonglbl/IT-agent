@@ -76,6 +76,47 @@ class JiraClient:
             print(f"Failed to fetch issues: {e}")
             raise
 
+    def search_issues_lightweight(self, jql, fields=None, start_at=0, max_results=50):
+        """
+        Search issues using JQL requesting only specific fields (no changelog).
+
+        Args:
+            jql: JQL query string
+            fields: List of field names to return (default: ["assignee", "reporter"])
+            start_at: Pagination offset (default: 0)
+            max_results: Maximum results per page (default: 50)
+
+        Returns:
+            tuple: (issues_list, total_count)
+        """
+        if fields is None:
+            fields = ["assignee", "reporter"]
+
+        endpoint = f"{self.url}/rest/api/2/search"
+        params = {
+            "jql": jql,
+            "startAt": start_at,
+            "maxResults": max_results,
+            "fields": fields
+        }
+
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+
+            if response.status_code != 200:
+                print(f"Jira API Error ({response.status_code}): {response.text}")
+                response.raise_for_status()
+
+            data = response.json()
+            issues = data.get("issues", [])
+            total = data.get("total", 0)
+
+            return issues, total
+
+        except Exception as e:
+            print(f"Failed to fetch issues: {e}")
+            raise
+
     def get_issue_count(self, jql):
         """
         Get total number of issues for a JQL (lightweight request).
@@ -103,6 +144,29 @@ class JiraClient:
         except Exception as e:
             print(f"Failed to get issue count: {e}")
             raise
+
+    # ===== Users =====
+
+    def get_user(self, username):
+        """
+        Get a single Jira user by username.
+
+        Args:
+            username: Jira login name
+
+        Returns:
+            dict: User dict with 'key', 'name', 'displayName', etc. or None
+        """
+        endpoint = f"{self.url}/rest/api/2/user"
+        params = {"username": username}
+        try:
+            response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return None
 
     # ===== Attachments =====
 
