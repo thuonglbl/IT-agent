@@ -86,6 +86,11 @@ def main():
         log("Check credentials and URL.", "error")
         return
 
+    # Load user caches for user linking
+    log("Loading GLPI user cache...")
+    glpi.load_user_cache(recursive=True)
+    log(f"Loaded {len(glpi.user_cache)} users, {len(glpi.fullname_cache)} fullnames\n")
+
     # Statistics
     processed_count = 0
     error_count = 0
@@ -110,6 +115,14 @@ def main():
                     # Parse Confluence HTML
                     parser = ConfluenceParser(file_path)
                     parser.parse()
+
+                    # Resolve user references to GLPI profile links
+                    unresolved_mentions = parser.resolve_user_mentions(glpi.user_cache)
+                    unresolved_metadata = parser.resolve_metadata_users(glpi.get_user_id_by_fullname)
+                    for u in unresolved_mentions:
+                        log(f"  - Unresolved @mention: {u}", "warning")
+                    for u in unresolved_metadata:
+                        log(f"  - Unresolved metadata user: {u}", "warning")
 
                     # Process images
                     for img_data in parser.images:

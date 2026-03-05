@@ -124,7 +124,7 @@ class ConfluenceParser:
                     })
 
         # 5. Extract Metadata (Author/Date)
-        # Usually in <div class="page-metadata"> 
+        # Usually in <div class="page-metadata">
         # Or look for pattern "Created by ... on ..."
         self.metadata_html = ""
         meta_div = self.soup.find('div', class_='page-metadata')
@@ -133,6 +133,85 @@ class ConfluenceParser:
             # Fix: use separator=' ' to avoid "Created byName"
             text = meta_div.get_text(separator=' ', strip=True)
             self.metadata_html = f"<p style='color: #666; font-style: italic; font-size: 0.9em;'>{text}</p>"
+
+    def resolve_user_mentions(self, login_cache):
+        """
+        Resolve Confluence @mentions to GLPI profile links.
+        Finds <a class="confluence-userlink" data-username="login"> tags
+        and replaces href with GLPI profile URL.
+
+        Args:
+            login_cache: dict of login_name (lowercase) -> user_id
+
+        Returns:
+            list: Unresolved usernames (not found in GLPI)
+        """
+        if not self.content_div:
+            return []
+
+        unresolved = []
+        for link in self.content_div.find_all('a', class_='confluence-userlink'):
+            username = link.get('data-username')
+            if not username:
+                continue
+
+            user_id = login_cache.get(username.lower())
+            if user_id is not None:
+                link['href'] = f"/front/user.form.php?id={user_id}"
+            else:
+                if link.has_attr('href'):
+                    del link['href']
+                unresolved.append(username)
+
+        return unresolved
+
+    def resolve_metadata_users(self, fullname_cache_lookup):
+        """
+        Resolve author/editor in page metadata to GLPI profile links.
+        Operates on self.soup (original HTML) to find spans,
+        then rebuilds self.metadata_html with links.
+
+        Args:
+            fullname_cache_lookup: callable(display_name) -> user_id or None
+
+        Returns:
+            list: Unresolved display names (not found in GLPI)
+        """
+        if not self.soup:
+            return []
+
+        meta_div = self.soup.find('div', class_='page-metadata')
+        if not meta_div:
+            return []
+
+        import html as html_module
+
+        unresolved = []
+        resolved = {}  # name -> user_id
+        for span_class in ('author', 'editor'):
+            span = meta_div.find('span', class_=span_class)
+            if not span:
+                continue
+
+            name = span.get_text(strip=True)
+            if not name:
+                continue
+
+            user_id = fullname_cache_lookup(name)
+            if user_id is not None:
+                resolved[name] = user_id
+            else:
+                unresolved.append(name)
+
+        # Rebuild metadata_html: escape text first, then inject only our links
+        text = html_module.escape(meta_div.get_text(separator=' ', strip=True))
+        for name, user_id in resolved.items():
+            escaped_name = html_module.escape(name)
+            link_html = f'<a href="/front/user.form.php?id={int(user_id)}">{escaped_name}</a>'
+            text = text.replace(escaped_name, link_html, 1)
+        self.metadata_html = f"<p style='color: #666; font-style: italic; font-size: 0.9em;'>{text}</p>"
+
+        return unresolved
 
     def get_content_html(self):
         """Return the modified inner HTML of the content div."""
