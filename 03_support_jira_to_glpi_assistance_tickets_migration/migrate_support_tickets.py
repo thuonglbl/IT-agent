@@ -3,6 +3,7 @@ Jira to GLPI Migration Script - Refactored Version 2.0
 Migrates support tickets from Jira to GLPI Assistance with resumable state
 """
 import os
+import time
 
 # Import from shared library
 from common.config.loader import load_config
@@ -224,6 +225,8 @@ def main():
     Main migration orchestrator.
     Coordinates configuration, clients, and migration flow.
     """
+    script_start = time.time()
+
     # Load configuration
     try:
         config = load_config()
@@ -234,6 +237,7 @@ def main():
     # Setup logging
     logger = setup_logger("migration", config)
     logger.info("=== Jira Support to GLPI Assistance Migration v2.0 ===")
+    logger.info(f"Script started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(script_start))}")
 
     # Initialize user tracker
     user_tracker = UserTracker()
@@ -367,6 +371,14 @@ def main():
             logger.info("GLPI session closed")
         except:
             pass
+
+        # Log elapsed time
+        script_end = time.time()
+        elapsed = script_end - script_start
+        minutes, seconds = divmod(elapsed, 60)
+        hours, minutes = divmod(minutes, 60)
+        logger.info(f"Script ended at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(script_end))}")
+        logger.info(f"Total elapsed time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
 
 
 if __name__ == "__main__":
