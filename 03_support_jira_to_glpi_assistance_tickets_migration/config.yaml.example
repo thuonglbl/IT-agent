@@ -20,10 +20,10 @@ migration:
   # Lists Jira users not found in GLPI during migration
   missing_users_file: "missing_users.txt"
 
-  # Debug: Target specific ticket key for testing (optional)
-  # Set to null to process all tickets (use common debug setting for batch control)
-  # If set (e.g., "SUPPORT-123"), only this ticket will be migrated
-  jira_debug_ticket_key: null
+  # Debug settings
+  debug:
+    enabled: false
+    target_ticket_key: "SUPPORT-123"
 
 # ===== Field Mappings =====
 mappings:
