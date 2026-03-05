@@ -1,7 +1,7 @@
 """
 Field extraction and mapping from Jira issues to GLPI tickets
 """
-from lib.utils import parse_jira_date
+from common.utils.dates import parse_jira_date
 
 
 def extract_basic_fields(issue, config):
@@ -254,9 +254,12 @@ def map_priority(priority_jira, mapping, default):
     return mapping.get(priority_lower, default)
 
 
-def map_classification_to_assets(issue, config, glpi_client, logger):
+def map_classification_to_location_and_category(issue, config, glpi_client, logger):
     """
-    Map Jira classifications to GLPI location and items.
+    Map Jira classifications to GLPI location and ITIL category.
+
+    Location: uses config mapping (classification_to_location).
+    Category: uses exact classification name (create if not exists).
 
     Args:
         issue: Jira issue dictionary
@@ -265,7 +268,7 @@ def map_classification_to_assets(issue, config, glpi_client, logger):
         logger: Logger instance
 
     Returns:
-        dict: {location_id, items_to_link, classification_str}
+        dict: {location_id, category_id, classification_str, classifications}
     """
     fields = issue['fields']
     custom_fields_config = config.get('custom_fields', {})
@@ -281,13 +284,12 @@ def map_classification_to_assets(issue, config, glpi_client, logger):
         classifications.append(str(classification_raw.get('value') if isinstance(classification_raw, dict) else classification_raw))
 
     location_id = None
-    items_to_link = {}  # {"Type": [ID, ID]}
+    category_id = None
 
     classification_to_location = config.get('mappings', {}).get('classification_to_location', {})
-    classification_to_item = config.get('mappings', {}).get('classification_to_item', {})
 
     for cls in classifications:
-        # Check Location Mapping
+        # Location mapping (via config lookup)
         if cls in classification_to_location:
             loc_name = classification_to_location[cls]
             lid = glpi_client.get_location_id(loc_name)
@@ -296,37 +298,28 @@ def map_classification_to_assets(issue, config, glpi_client, logger):
                 logger.info(f"Mapped classification '{cls}' to location '{loc_name}' (ID: {lid})")
             else:
                 logger.warning(f"Location '{loc_name}' not found in GLPI (mapped from '{cls}')")
+            continue  # Location classifications are not used for category
 
-        # Check Item Mapping
-        if cls in classification_to_item:
-            item_type, item_name = classification_to_item[cls]
-
-            # Normalize Business_Service -> BusinessService for API
-            if item_type == 'Business_Service':
-                item_type = 'BusinessService'
-
-            iid = glpi_client.get_item_id(item_type, item_name)
-            if iid:
-                if item_type not in items_to_link:
-                    items_to_link[item_type] = []
-                items_to_link[item_type].append(iid)
-                logger.info(f"Found item '{item_name}' ({item_type}) ID: {iid}")
-            else:
-                logger.warning(f"Item '{item_name}' ({item_type}) not found in GLPI (mapped from '{cls}')")
+        # Category mapping (exact name match, create if not exists)
+        if not category_id:
+            cat_id = glpi_client.get_or_create_category(cls)
+            if cat_id:
+                category_id = cat_id
+                logger.info(f"Mapped classification '{cls}' to category (ID: {cat_id})")
 
     classification_str = ", ".join(classifications)
 
     return {
         'location_id': location_id,
-        'items_to_link': items_to_link,
+        'category_id': category_id,
         'classification_str': classification_str,
         'classifications': classifications,
     }
 
 
-def extract_security_category(issue, glpi_client, logger):
+def extract_security_group(issue, glpi_client, logger):
     """
-    Extract security level and map to GLPI ITIL category.
+    Extract security level and map to GLPI Group (for Assigned To).
 
     Args:
         issue: Jira issue dictionary
@@ -334,7 +327,7 @@ def extract_security_category(issue, glpi_client, logger):
         logger: Logger instance
 
     Returns:
-        int: GLPI category ID or None
+        int: GLPI group ID or None
     """
     fields = issue['fields']
     security = (fields.get('security') or {}).get('name', '')
@@ -342,12 +335,12 @@ def extract_security_category(issue, glpi_client, logger):
     if not security or security == 'None':
         return None
 
-    # Try to find matching category in GLPI
-    category_id = glpi_client.get_category_id(security)
+    # Find or create matching group in GLPI
+    group_id = glpi_client.get_or_create_group(security)
 
-    if category_id:
-        logger.debug(f"Mapped security level '{security}' to category ID {category_id}")
+    if group_id:
+        logger.info(f"Mapped security level '{security}' to group ID {group_id}")
     else:
-        logger.debug(f"Security level '{security}' not found in GLPI categories")
+        logger.warning(f"Failed to map security level '{security}' to GLPI group")
 
-    return category_id
+    return group_id

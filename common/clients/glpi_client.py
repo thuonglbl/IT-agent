@@ -251,6 +251,50 @@ class GlpiClient:
             return None
         return self.group_cache.get(group_name.lower())
 
+    def get_or_create_group(self, group_name):
+        """
+        Get GLPI Group ID by name. If not found, create it.
+
+        Args:
+            group_name: Group name
+
+        Returns:
+            int: Group ID or None
+        """
+        if not group_name:
+            return None
+
+        # Check cache first
+        group_id = self.group_cache.get(group_name.lower())
+        if group_id:
+            return group_id
+
+        # Create new group
+        print(f"  [NEW] Creating Group '{group_name}'...")
+        endpoint = f"{self.url}/Group"
+        payload = {
+            "input": {
+                "name": group_name,
+                "is_assign": 1,
+            }
+        }
+
+        try:
+            response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            response.raise_for_status()
+            result = response.json()
+            new_id = result.get('id')
+            if new_id:
+                self.group_cache[group_name.lower()] = new_id
+                print(f"  [NEW] Created Group '{group_name}' -> GLPI ID {new_id}")
+                return new_id
+            else:
+                print(f"  [ERROR] Group creation returned no ID: {result}")
+                return None
+        except Exception as e:
+            print(f"  [ERROR] Failed to create group '{group_name}': {e}")
+            return None
+
     # ===== Category Cache (ITIL Categories) =====
 
     def load_category_cache(self, recursive=True):
