@@ -1,19 +1,29 @@
-Unified library for GLPI and Jira migration scripts.
+# Common Library for IT-Agent Migrations
+
+Unified library consolidating common functionality across all migration folders.
 
 ## Overview
 
-The `common/` library unifies code from the 3 migration folders to reduce duplication and provide a single source of truth for API interactions.
+The `common/` library extracts and unifies code from all 3 migration folders:
+- **Folder 01**: Confluence to GLPI Knowledge Base
+- **Folder 02**: Jira Projects to GLPI Project Tasks
+- **Folder 03**: Jira Support Tickets to GLPI Assistance
 
-**Key Components:**
-- Unified GLPI v1 & Jira v2 API clients
-- Shared configuration loader (YAML/Env)
-- State management for resumable migrations
-- Logging & date utilities
+**Benefits:**
+- ✅ **-83% code duplication** (~1,200 lines eliminated)
+- ✅ **Single source of truth** for API clients
+- ✅ **Consistent patterns** across all migrations
+- ✅ **Easier maintenance** - update once, benefit all
+- ✅ **Reusable** for future migrations
+
+---
 
 ## Directory Structure
 
 ```
 common/
+├── import_ldap_playwright.py   # LDAP user import automation (Playwright)
+├── check_missing_users.py      # Pre-migration: find Jira users missing from GLPI
 ├── clients/                    # API client implementations
 │   ├── glpi_client.py         # Unified GLPI REST API v1 client
 │   └── jira_client.py         # Unified Jira REST API v2 client
@@ -26,7 +36,7 @@ common/
 │   └── user_tracker.py        # Missing users tracker
 ├── logging/                    # Logging setup
 │   └── logger.py              # Structured logging
-└── README.md                   # This file
+└── USER_GUIDE.md               # This file
 ```
 
 ---
@@ -35,7 +45,7 @@ common/
 
 ### 1. clients/glpi_client.py
 
-**Purpose:** Unified GLPI REST API v1 client consolidating all 3 implementations
+**Purpose:** Unified GLPI REST API v1 client consolidating all 3 implementations (~950 lines)
 
 **Features:**
 - Session management (User Token + Basic Auth fallback)
@@ -124,7 +134,7 @@ get_item_id(), get_item()
 
 ### 2. clients/jira_client.py
 
-**Purpose:** Unified Jira REST API v2 client merging implementations from folders 02 & 03
+**Purpose:** Unified Jira REST API v2 client merging implementations from folders 02 & 03 (~310 lines)
 
 **Features:**
 - Issue search with pagination
@@ -162,7 +172,9 @@ content = jira.get_attachment_content("https://jira.example.com/attachment/12345
 **Key Methods:**
 ```python
 search_issues(jql, start_at, max_results)  # Pagination support
+search_issues_lightweight(jql, fields)     # Lightweight search (no changelog)
 get_issue_count(jql)                       # Lightweight count
+get_user(username)                         # Get user by login (returns key, name, displayName)
 get_attachment_content(url)                # Download attachments
 get_project_statuses(project_key)          # Status list
 get_project_issue_types(project_key)       # Issue types
@@ -603,6 +615,275 @@ common/tests/
 
 ---
 
+## Benefits Summary
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Total Lines | ~4,500 | ~3,800 | -15% |
+| Duplicated Code | ~1,200 | ~200 | -83% |
+| API Clients | 5 (3 GLPI + 2 Jira) | 2 (1 GLPI + 1 Jira) | -60% |
+| Config Approaches | 3 different | 1 unified | Consistent |
+| Logging | 2 approaches | 1 structured | Consistent |
+
+---
+
+## LDAP User Import Automation
+
+The `import_ldap_playwright.py` script automates bulk LDAP user imports into GLPI using Playwright browser automation. This is a **prerequisite** before running any migration (folder 01, 02, or 03), as ticket/task assignment depends on users existing in GLPI.
+
+### Why This Script?
+
+GLPI's built-in LDAP import UI can only process a few users at a time. For large directories (1,000+ users), manual import is impractical. This script automates the entire process.
+
+### Prerequisites
+
+```bash
+pip install -r common/requirements.txt
+playwright install chromium
+```
+
+### Configuration
+
+The script reads credentials from `common/config.yaml`:
+
+```yaml
+glpi:
+  url: "https://your-glpi-server.com/api.php/v1"
+  username: "your_username"    # Optional: prompted if not set
+  password: "your_password"    # Optional: prompted if not set
+```
+
+### Usage
+
+```bash
+# From project root
+python common/import_ldap_playwright.py
+```
+
+### Parameters (in-script)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `BATCH_SIZE` | `3` | Users per batch. Do NOT increase — GLPI cannot handle more |
+| `MAX_BATCHES` | `95` | Set to `1` for testing, `1000` for full run |
+
+### Process
+
+1. Launches Chromium browser (visible, not headless)
+2. Logs into GLPI automatically
+3. Navigates to LDAP import page
+4. Searches for users, selects batch, imports via Massive Actions
+5. Repeats until no more users found or MAX_BATCHES reached
+6. Includes auto-retry logic for network errors and redirects
+
+---
+
+## Check Missing Users (Pre-Migration Report)
+
+The `check_missing_users.py` script identifies Jira users that do not exist in GLPI **before** running any migration. For each missing user, it checks Active Directory to determine the reason (deleted, disabled, or active but not imported) and collects related Jira tickets.
+
+### Why Run This?
+
+Migrations assign tickets/tasks to users by matching Jira login names to GLPI users. If a user is missing from GLPI, the migration cannot assign the ticket correctly. Running this script first lets you:
+- Import missing users via LDAP before migration
+- Understand why certain users are missing (deleted from AD, disabled, etc.)
+- Decide how to handle each case
+
+### Prerequisites
+
+- GLPI session credentials configured in `common/config.yaml`
+- Jira PAT configured in `common/config.yaml`
+- `ldap3` Python package installed (optional, for AD status checking)
+
+```bash
+pip install ldap3
+```
+
+### Usage
+
+```bash
+cd common
+
+# Basic: scan one project
+python check_missing_users.py PROJ1
+
+# Multiple projects
+python check_missing_users.py PROJ1 PROJ2
+
+# Skip issue scan (faster, only checks assignable users)
+python check_missing_users.py PROJ1 --skip-issues
+
+# Custom output file and batch size
+python check_missing_users.py PROJ1 -o report.txt --batch-size 50
+```
+
+### CLI Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `project_keys` | (required) | One or more Jira project keys |
+| `-o`, `--output` | `missing_users.txt` | Output file path |
+| `--batch-size` | `100` | Issues per API page during scan |
+| `--skip-issues` | off | Only check assignable users (skip issue assignee/reporter scan) |
+
+### How It Works
+
+1. **Collect Jira users** from two sources:
+   - **Assignable users** — via Jira project assignable API
+   - **Issue assignees/reporters** — by scanning all project issues (unless `--skip-issues`)
+2. **Compare against GLPI** — check each Jira user against GLPI user cache
+3. **Connect to Active Directory** — auto-detects LDAP config from GLPI API (`GET /AuthLDAP`), binds with GLPI credentials
+4. **Check AD status** for each missing user:
+   - Search AD by `sAMAccountName` matching the Jira login
+   - If not found, retry with the Jira `key` field (handles renamed users, e.g. `1234567890` -> key `abc`)
+   - Report reason: `Deleted from AD`, `Disabled in AD`, or `Active in AD but not in GLPI`
+5. **Generate TSV report** with 5 columns
+
+### Report Format
+
+The output is a tab-separated file with 5 columns:
+
+```
+Login Name	Jira Key	Full Name	Reason	Related Tickets
+```
+
+| Column | Description |
+|--------|-------------|
+| **Login Name** | Jira login name (`name` field) |
+| **Jira Key** | Jira `key` field — helps identify renamed users (e.g. numeric login with real sAMAccountName in key) |
+| **Full Name** | Display name from Jira |
+| **Reason** | Why the user is missing from GLPI |
+| **Related Tickets** | Comma-separated issue keys where user appears as assignee or reporter |
+
+### Possible Reasons
+
+| Reason | Meaning | Action |
+|--------|---------|--------|
+| `Deleted from AD` | User account no longer exists in Active Directory | No action needed — user cannot be imported |
+| `Disabled in AD` | User account exists but is disabled (userAccountControl bit 2) | Can be imported if LDAP filter includes disabled accounts |
+| `Disabled in AD (sAMAccountName=<key>)` | Same as above, but found via Jira key (login differs from AD username) | Check if LDAP filter includes disabled accounts |
+| `Active in AD but not in GLPI` | User exists and is active in AD but not imported into GLPI | Run LDAP import to add this user |
+| `Active in AD as <key>, not in GLPI` | Same as above, found via Jira key | Run LDAP import using the AD username |
+| `Not in GLPI` | LDAP connection unavailable — cannot determine AD status | Install `ldap3` or check GLPI LDAP config |
+
+### Example Output
+
+```
+$ cd common && python check_missing_users.py PROJ1
+
+Collecting users from project: PROJ1
+  [Assignable] 100 users from PROJ1
+  [Issues] Scanning 507 issues in PROJ1...
+    Scanned 507/507 issues, 304 unique users so far
+  [Issues] 304 unique users from issues in PROJ1
+
+Total unique Jira users collected: 374
+GLPI users in cache: 4176
+
+Checking against GLPI...
+  32 users not found in GLPI
+
+Fetching LDAP config from GLPI...
+  Connected to AD: ldap://IP as login@domain.local
+
+Checking AD status for 32 missing users...
+    [MISSING] 1234567890 (key=abc): Disabled in AD (sAMAccountName=abc)
+    [MISSING] xyz (key=xyz): Deleted from AD
+    ...
+
+[REPORT] 32 missing users written to missing_users.txt
+
+Done. 32 missing users found.
+```
+
+### LDAP Auto-Detection
+
+The script automatically fetches LDAP connection details from GLPI's API (`GET /AuthLDAP`) — no extra configuration needed. It derives the AD domain from the `basedn` field (e.g. `DC=domain,DC=local` -> `domain.local`) and binds with the GLPI `username` and `password` from `config.yaml`.
+
+If `ldap3` is not installed or the LDAP connection fails, the script still runs but reports all missing users with reason `Not in GLPI` instead of the specific AD status.
+
+---
+
+## GLPI LDAP Configuration Guide
+
+This section documents the recommended LDAP configuration for importing users from Active Directory into GLPI. Proper LDAP setup is a **prerequisite** for all migrations, as ticket assignment and user matching depend on a complete user base in GLPI.
+
+### Problem: Missing Users
+
+If GLPI shows significantly fewer users than expected after LDAP import, the most likely cause is **Active Directory's MaxPageSize limit (default: 1,000)**. AD silently truncates non-paged LDAP query results.
+
+### Recommended LDAP Settings
+
+**Path:** Setup > Authentication > LDAP Directories > \<your directory\>
+
+#### Main Tab
+
+| Setting | Recommended Value | Notes |
+|---------|-------------------|-------|
+| Server | `ldap://your-dc-ip` | Use IP or FQDN of Domain Controller |
+| Port | `389` (or `636` for LDAPS) | 636 requires TLS certificate |
+| Connection Filter | See below | Must exclude disabled accounts |
+| BaseDN | `DC=yourDomain,DC=local` | Root of domain to cover all OUs |
+| Use bind | Yes | Required for AD |
+| RootDN | `service_account@domain.local` | Dedicated service account |
+| Login Field | `samaccountname` | Standard for AD |
+| Synchronization field | `objectguid` | Unique and persistent AD identifier |
+
+#### Connection Filter (Recommended)
+
+```
+(&(objectClass=user)(objectCategory=person))
+```
+
+This filter:
+- `objectClass=user` + `objectCategory=person` — selects real user accounts (excludes computers, groups)
+
+> **Note on disabled accounts:** Do NOT add `(!(userAccountControl:1.2.840.113556.1.4.803:=2))` to exclude disabled users if you are migrating data from external systems (e.g., Jira). Disabled users may still be assigned to tickets/tasks and must exist in GLPI for user matching to work correctly during migration.
+
+#### Advanced Information Tab
+
+| Setting | Recommended Value | Why |
+|---------|-------------------|-----|
+| **Use paged results** | **Yes** | **Critical.** Without this, AD limits results to 1,000 entries |
+| Page Size | `10000` | AD caps to its own MaxPageSize (default 1,000) per page regardless. Larger value reduces round-trips |
+| Timeout | `30` | Allows enough time for paged queries on large directories |
+| Maximum number of results | Unlimited | Do not artificially limit results |
+| Use TLS | Yes (recommended) | Encrypts LDAP traffic including bind credentials |
+
+### Entity Configuration
+
+**Path:** Administration > Entities > \<entity\> > Advanced Information
+
+| Setting | Recommended Value |
+|---------|-------------------|
+| LDAP Directory | **Default Server** |
+
+Ensure the entity points to the Default Server (which has the correct paged results configuration), not a local/secondary server.
+
+### Verification Steps
+
+After applying the configuration:
+
+1. **Test connection:** LDAP Directory > Test tab — all 5 checks should pass (TCP, BaseDN, URI, Bind, Search)
+2. **Import new users:** Administration > Users > LDAP Directory Link > Import New Users > Search with empty criteria
+3. **Verify count:** Total GLPI users should match your AD user count (minus disabled accounts)
+
+### Troubleshooting
+
+| Symptom | Likely Cause | Solution |
+|---------|-------------|----------|
+| Fewer users imported | Paged results not enabled | Set `Use paged results = Yes` |
+| "No results found" on import | All returned users already imported + paging off | Enable paged results to discover remaining users |
+| Import includes disabled accounts | Missing userAccountControl filter | Update Connection Filter to exclude flag 2 |
+| Timeout errors during import | Timeout too low for large directory | Increase Timeout to 30+ seconds |
+| Users not syncing to correct entity | Entity pointing to wrong LDAP server | Set entity LDAP Directory to Default Server |
+
+### Reference
+
+- Full investigation details: [PRD-glpi-ldap-user-import-fix.md](../_bmad-output/planning-artifacts/PRD-glpi-ldap-user-import-fix.md)
+
+---
+
 ## Future Enhancements
 
 1. **Add unit tests** for all modules
@@ -625,7 +906,7 @@ When adding new features:
 
 ## License
 
-License: MIT
+Internal use only for IT-Agent migration project.
 
 ---
 
@@ -635,4 +916,4 @@ For questions or issues:
 1. Check this README
 2. Check individual module docstrings
 3. Check migration folder USER_GUIDE.md files
-4. Contact: thuong.lambale@gmail.com
+4. Contact: [Project maintainer]

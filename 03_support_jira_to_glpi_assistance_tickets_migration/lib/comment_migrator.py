@@ -1,7 +1,7 @@
 """
 Comment migration from Jira to GLPI followups
 """
-from lib.utils import parse_jira_date, format_comment_date
+from common.utils.dates import parse_jira_date, format_comment_date
 from lib.html_builder import convert_jira_content
 
 

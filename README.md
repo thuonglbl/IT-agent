@@ -23,6 +23,7 @@ The agent performs the following actions:
 ```
 IT-agent/
 ├── common/                    # Shared library (imported by all migrations)
+│   ├── import_ldap_playwright.py  # LDAP user import automation
 │   ├── clients/              # API clients (GLPI, Jira)
 │   ├── config/               # Configuration loader with inheritance
 │   ├── utils/                # Utilities (dates, state management)
@@ -78,7 +79,22 @@ cp config.yaml.example config.yaml
 # Edit config.yaml with migration-specific settings
 ```
 
-### 2. Run Migration
+### 2. Import LDAP Users (Required Before Any Migration)
+
+All migrations depend on users existing in GLPI for correct ticket/task assignment. You must import LDAP users first:
+
+```bash
+# Install dependencies (once)
+pip install -r common/requirements.txt
+playwright install chromium
+
+# Run LDAP import
+python common/import_ldap_playwright.py
+```
+
+Before running the import, ensure your GLPI LDAP directory is properly configured (paged results enabled, correct connection filter). See [common/USER_GUIDE.md](common/USER_GUIDE.md#glpi-ldap-configuration-guide) for detailed setup instructions.
+
+### 3. Run Migration
 
 ```bash
 # Choose the migration you need to run
@@ -105,9 +121,12 @@ python main.py  # (or migrate_support_tickets.py for folder 03, jira_to_glpi.py 
 - Custom field mappings
 - Status/Type/Priority mappings
 
-**Why using configuration inheritance?**
+**Benefits:**
+- ✅ Single source of truth for credentials
+- ✅ Update credentials once, all migrations benefit
+- ✅ Cleaner folder configs (only project-specific settings)
 
-It allows managing credentials in one place (`common/config.yaml`) while keeping project-specific settings (like JQL queries and custom fields) separated in their respective folders. This makes it easier to maintain multiple migration projects without duplicating sensitive information.
+See [Configuration Documentation](.claude/CONFIGURATION_REFACTORING.md) for details.
 
 ## Common Library
 
@@ -120,9 +139,13 @@ from common.clients.jira_client import JiraClient
 from common.utils.state_manager import StateManager
 ```
 
-**Documentation:** See [common/README.md](common/README.md)
+**Documentation:** See [common/USER_GUIDE.md](common/USER_GUIDE.md)
 
-By sharing the `common/` library, we significantly reduced code duplication and ensured consistent behavior across all migration scripts. The unified API clients also make it easier to handle rate limiting and session management centrally.
+**Benefits:**
+- ✅ -83% code duplication eliminated
+- ✅ Consistent patterns across all migrations
+- ✅ Single source of truth for API clients
+- ✅ Easier maintenance
 
 ## Features
 
@@ -136,11 +159,10 @@ By sharing the `common/` library, we significantly reduced code duplication and 
 
 For questions or issues:
 1. Check migration-specific USER_GUIDE.md files
-2. Check [common/README.md](common/README.md) for library documentation
+2. Check [common/USER_GUIDE.md](common/USER_GUIDE.md) for library documentation
 3. Review logs in `logs/` directory
 
 ---
 
 **Version:** 2.0 (with shared library and configuration inheritance)
 **Last Updated:** 2026-02-13
-**Contact:** thuong.lambale@gmail.com

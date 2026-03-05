@@ -21,14 +21,31 @@ Inside the `01_confluence_to_glpi_migration` folder, you will find:
 
 ```
 01_confluence_to_glpi_migration/
-├── cleanup_category.py         # Delete imported KB items (for rollback)
-├── config.yaml                 # Your configuration (create from example)
 ├── config.yaml.example         # Template configuration (copy to config.yaml)
-├── css_styles.py               # Mimic Confluence CSS styles
+├── config.yaml                 # Your configuration (create from example)
 ├── main.py                     # Main migration script
+├── confluence_contributors.py  # Contributor report (standalone)
+├── cleanup_category.py         # Delete imported KB items (for rollback)
 ├── parser.py                   # HTML parsing utilities
-├── requirements.txt            # Python dependencies
-└── test_curl.cmd               # Test GLPI API connection
+├── test_curl.cmd               # Test GLPI API connection
+└── requirements.txt            # Python dependencies
+```
+
+**Common Library** (shared across all migrations):
+```
+common/
+├── clients/
+│   ├── glpi_client.py          # GLPI API client (Knowledge Base operations)
+│   └── jira_client.py          # Jira API client
+├── config/
+│   ├── loader.py               # Multi-format config loader (YAML + ENV)
+│   └── validator.py            # Configuration validation
+├── utils/
+│   ├── dates.py                # Date parsing/formatting utilities
+│   ├── html_builder.py         # HTML content builders
+│   └── state_manager.py        # Migration state persistence
+└── logging/
+    └── logger.py               # Structured logging
 ```
 
 **Configuration Files**:
@@ -84,7 +101,31 @@ cd common
 cp config.yaml.example config.yaml
 ```
 
-Open `common/config.yaml` and update
+Open `common/config.yaml` and update:
+```yaml
+glpi:
+  url: "https://your-glpi-server.com/api.php/v1"  # Legacy API URL (from Step 3)
+  app_token: "YOUR_GLPI_APP_TOKEN"                # From Step 4
+  user_token: "YOUR_GLPI_USER_TOKEN"              # From Step 5
+  username: "your_username"                       # Optional: Basic Auth fallback
+  password: "your_password"                       # Optional: Basic Auth fallback
+  verify_ssl: "common/glpi.pem"                   # Path to SSL cert, or true/false
+
+jira:
+  url: "https://your-jira-server.com"
+  pat: "YOUR_JIRA_PAT"                            # Not needed for Confluence migration
+  verify_ssl: true
+
+migration:
+  batch_size: 50                                  # Pages per batch
+  debug: false                                    # Set true to process only 1 batch
+
+logging:
+  level: "INFO"                                   # DEBUG, INFO, WARNING, ERROR
+  console: true
+  file: true
+  file_path: "logs/migration_{timestamp}.log"
+```
 
 **SSL Certificate**:
 - Set `verify_ssl: true` to use default system CAs
@@ -168,7 +209,83 @@ If the script fails or you prefer a visual method:
 6.  Click **Submit**.
 7. Go to **Management > Documents** and delete the documents, then delete in Trash also.
 
-## 7. Limitations
+## 7. Confluence Contributor Report
+
+A standalone script that scans the Confluence HTML export and generates a report of all pages grouped by **Last Updated By**. Use this to identify who last edited each page, so you can remind them to review and update their content on GLPI Knowledge Base after migration.
+
+### Usage
+
+```bash
+cd 01_confluence_to_glpi_migration
+
+# Using export directory from config.yaml
+python confluence_contributors.py
+
+# Or specify export directory directly
+python confluence_contributors.py --export-dir "C:\Confluence-export"
+
+# With custom stale threshold (default: 6 months)
+python confluence_contributors.py --stale-months 3
+```
+
+### CLI Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--export-dir` | from `config.yaml` | Path to the Confluence HTML export directory |
+| `--stale-months` | `6` | Months threshold for flagging stale content |
+
+### Output
+
+The script produces two outputs:
+
+**Console report** — Pages grouped by last editor, with summary statistics:
+```
+================================================================
+CONFLUENCE CONTRIBUTOR REPORT
+Generated: 2026-03-03
+Total pages: 202 | Last editors: 28
+================================================================
+
+## Pierre GUIOL (12 pages)
+  # | Page Title                                    | Breadcrumbs                              | Created By                | Last Updated
+----+-------------------------------------------------+------------------------------------------+---------------------------+--------------
+  1 | API manager                                    | Home > User Knowledge Base               | John Smith                | Mar 12, 2025
+  2 | Print and Scan                                 | Home > User Knowledge Base               | Bobert Johnson            | Feb 12, 2025
+...
+
+SUMMARY
+================================================================
+TOP LAST EDITORS (by page count):
+   1. Michael Brown                - 12 pages
+   2. Sarah Davis                  - 8 pages
+   ...
+
+PAGES WITHOUT METADATA: 5
+PAGES LAST UPDATED > 6 MONTHS AGO: 152 (potential stale content)
+```
+
+**CSV file** — `confluence_contributors.csv` (one row per page, sorted by last editor):
+
+| Column | Description |
+|--------|-------------|
+| `last_updated_by` | Person who last edited the page |
+| `page_title` | Page title |
+| `breadcrumbs` | Page location in Confluence hierarchy |
+| `created_by` | Original page creator |
+| `last_updated` | Date of last update |
+| `confluence_id` | Confluence page ID |
+| `filename` | Source HTML filename |
+
+### How It Works
+
+- Walks all `.html` files in the export directory
+- Reuses `parser.py` to extract page title and breadcrumbs
+- Extracts metadata (`Created By`, `Last Updated By`, date) from `<div class="page-metadata">`
+- If no editor is found, falls back to author (same person created and last updated)
+- Pages with no metadata are grouped under "Unknown"
+
+## 8. Limitations
 
 *   **One-Way Migration**: This script performs a one-time import from Confluence to GLPI. It does **not** maintain a sync link.
 *   **Manual Updates Required**: If the content is updated in Confluence after the migration, those changes will **not** automatically appear in GLPI. You must manually update the article in GLPI to reflect the changes.

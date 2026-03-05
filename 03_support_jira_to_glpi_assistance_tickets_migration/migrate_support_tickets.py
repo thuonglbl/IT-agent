@@ -3,6 +3,7 @@ Jira to GLPI Migration Script - Refactored Version 2.0
 Migrates support tickets from Jira to GLPI Assistance with resumable state
 """
 import os
+import time
 
 # Import from shared library
 from common.config.loader import load_config
@@ -23,8 +24,8 @@ from lib.field_extractor import (
     map_status,
     map_type,
     map_priority,
-    map_classification_to_assets,
-    extract_security_category,
+    map_classification_to_location_and_category,
+    extract_security_group,
 )
 from lib.html_builder import build_full_description
 from lib.attachment_handler import process_attachments, link_attachments_to_ticket
@@ -43,43 +44,6 @@ def save_state(state_file, start_at, total_processed):
     """Save migration state to JSON file (wrapper for StateManager)."""
     manager = StateManager(state_file)
     manager.save(start_at, total_processed)
-
-
-def sync_security_levels(jira_client, glpi_client, config, logger):
-    """
-    Sync Jira security levels to GLPI ITIL categories.
-    Creates categories in GLPI if they don't exist.
-
-    Args:
-        jira_client: Jira client instance
-        glpi_client: GLPI client instance
-        config: Configuration dictionary
-        logger: Logger instance
-    """
-    logger.info("Syncing Jira security levels to GLPI categories...")
-
-    try:
-        # Get security levels from Jira
-        security_levels = jira_client.get_security_levels()
-
-        if not security_levels:
-            logger.warning("No security levels found in Jira")
-            return
-
-        for level_name in security_levels:
-            # Check if category exists in GLPI
-            category_id = glpi_client.get_category_id(level_name)
-
-            if not category_id:
-                # Create category if it doesn't exist
-                try:
-                    category_id = glpi_client.create_category(level_name)
-                    logger.info(f"Created GLPI category: {level_name} (ID: {category_id})")
-                except Exception as e:
-                    logger.warning(f"Failed to create category '{level_name}': {e}")
-
-    except Exception as e:
-        logger.error(f"Failed to sync security levels: {e}")
 
 
 def build_dynamic_status_mapping(jira_client, glpi_client, config, logger):
@@ -164,11 +128,11 @@ def process_issue(jira_client, glpi_client, issue, status_mapping, config, logge
     attachments = issue['fields'].get('attachment', [])
     attachment_map = process_attachments(attachments, jira_client, glpi_client, logger)
 
-    # 8. Map classification to location and items
-    classification_assets = map_classification_to_assets(issue, config, glpi_client, logger)
+    # 8. Map classification to location and category
+    classification_result = map_classification_to_location_and_category(issue, config, glpi_client, logger)
 
-    # 9. Extract security level -> ITIL category
-    itilcategories_id = extract_security_category(issue, glpi_client, logger)
+    # 9. Extract security level -> Group (Assigned To)
+    security_group_id = extract_security_group(issue, glpi_client, logger)
 
     # 10. Build complete HTML description
     full_desc = build_full_description(
@@ -229,11 +193,14 @@ def process_issue(jira_client, glpi_client, issue, status_mapping, config, logge
     if participants['participant_ids']:
         ticket_args["_users_id_observer"] = participants['participant_ids']
 
-    if classification_assets['location_id']:
-        ticket_args["locations_id"] = classification_assets['location_id']
+    if classification_result['location_id']:
+        ticket_args["locations_id"] = classification_result['location_id']
 
-    if itilcategories_id:
-        ticket_args["itilcategories_id"] = itilcategories_id
+    if classification_result['category_id']:
+        ticket_args["itilcategories_id"] = classification_result['category_id']
+
+    if security_group_id:
+        ticket_args["_groups_id_assign"] = security_group_id
 
     # 13. Create ticket in GLPI
     ticket_id = glpi_client.create_ticket(
@@ -244,19 +211,10 @@ def process_issue(jira_client, glpi_client, issue, status_mapping, config, logge
 
     logger.info(f"  -> Created Ticket ID: {ticket_id}")
 
-    # 14. Link items (Business Services, Software, etc.)
-    for item_type, item_ids in classification_assets['items_to_link'].items():
-        for item_id in item_ids:
-            try:
-                glpi_client.link_item_to_ticket(ticket_id, item_type, item_id)
-                logger.debug(f"Linked {item_type} {item_id} to ticket {ticket_id}")
-            except Exception as e:
-                logger.warning(f"Failed to link {item_type} {item_id} to ticket {ticket_id}: {e}")
-
-    # 15. Link attachments
+    # 14. Link attachments
     link_attachments_to_ticket(ticket_id, attachment_map, glpi_client, logger)
 
-    # 16. Migrate comments
+    # 15. Migrate comments
     migrate_comments(ticket_id, issue, attachment_map, glpi_client, config, logger, user_tracker)
 
     return ticket_id
@@ -267,6 +225,8 @@ def main():
     Main migration orchestrator.
     Coordinates configuration, clients, and migration flow.
     """
+    script_start = time.time()
+
     # Load configuration
     try:
         config = load_config()
@@ -277,6 +237,7 @@ def main():
     # Setup logging
     logger = setup_logger("migration", config)
     logger.info("=== Jira Support to GLPI Assistance Migration v2.0 ===")
+    logger.info(f"Script started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(script_start))}")
 
     # Initialize user tracker
     user_tracker = UserTracker()
@@ -334,19 +295,15 @@ def main():
 
         logger.info(f"Resuming from offset {start_at}, {total_processed} processed so far")
 
-        # Sync security levels (only on first run)
-        if start_at == 0:
-            sync_security_levels(jira, glpi, config, logger)
-
         # Debug mode configuration
         debug_config = migration_config.get('debug', {})
-        debug_ticket = debug_config.get('target_ticket_key')
         debug_enabled = debug_config.get('enabled', False)
+        debug_ticket = debug_config.get('target_ticket_key') if debug_enabled else None
 
         if debug_ticket:
             logger.info(f"[DEBUG MODE] Targeting single ticket: {debug_ticket}")
         elif debug_enabled:
-            logger.info("[DEBUG MODE] Will process 1 ticket and exit")
+            logger.info("[DEBUG MODE] Will process 1 batch and exit")
 
         # Main migration loop
         batch_size = migration_config.get('batch_size', 50)
@@ -414,6 +371,14 @@ def main():
             logger.info("GLPI session closed")
         except:
             pass
+
+        # Log elapsed time
+        script_end = time.time()
+        elapsed = script_end - script_start
+        minutes, seconds = divmod(elapsed, 60)
+        hours, minutes = divmod(minutes, 60)
+        logger.info(f"Script ended at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(script_end))}")
+        logger.info(f"Total elapsed time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
 
 
 if __name__ == "__main__":

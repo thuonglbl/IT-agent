@@ -31,6 +31,29 @@ Inside the `03_support_jira_to_glpi_assistance_tickets_migration` folder, you wi
     └── migration_*.log         # Timestamped log files
 ```
 
+**Common Library** (shared across all migrations):
+```
+common/
+├── clients/
+│   ├── glpi_client.py          # GLPI API client (Ticket/Assistance operations)
+│   └── jira_client.py          # Jira API client with pagination
+├── config/
+│   ├── loader.py               # Multi-format config loader (YAML + ENV)
+│   └── validator.py            # Configuration validation
+├── utils/
+│   ├── dates.py                # Date parsing/formatting (UTC+7)
+│   ├── html_builder.py         # HTML description builders
+│   ├── state_manager.py        # Migration state persistence
+│   └── text_utils.py           # String utilities
+├── cache/
+│   └── user_cache.py           # User caching for O(1) lookups
+├── tracking/
+│   ├── user_tracker.py         # Missing users tracker
+│   └── migration_reporter.py   # Progress reporting
+└── logging/
+    └── logger.py               # Structured logging
+```
+
 **Configuration Files**:
 - `common/config.yaml`: Shared credentials (GLPI tokens, Jira PAT, batch size, logging)
 - `common/glpi.pem`: SSL certificate for GLPI (if using self-signed certificates)
@@ -117,7 +140,32 @@ cd common
 cp config.yaml.example config.yaml
 ```
 
-Open `common/config.yaml` and update
+Open `common/config.yaml` and update:
+
+```yaml
+glpi:
+  url: "https://your-glpi-server.com/api.php/v1"
+  app_token: "YOUR_GLPI_APP_TOKEN"
+  user_token: "YOUR_GLPI_USER_TOKEN"
+  username: "your_username"                # Optional: Basic Auth fallback
+  password: "your_password"                # Optional: Basic Auth fallback
+  verify_ssl: "common/glpi.pem"            # Path to SSL cert, or true/false
+
+jira:
+  url: "https://your-jira-server.com"
+  pat: "YOUR_JIRA_PERSONAL_ACCESS_TOKEN"
+  verify_ssl: true
+
+migration:
+  batch_size: 50                           # Tickets per batch
+  debug: false                             # Set true to process only 1 batch
+
+logging:
+  level: "INFO"                            # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  console: true
+  file: true
+  file_path: "logs/migration_{timestamp}.log"
+```
 
 **Debug Mode**:
 - `debug: false` → Process all tickets (full migration)
@@ -195,14 +243,14 @@ Map Jira **Classification** custom field values to GLPI **Locations** and **Item
 ```yaml
 mappings:
   classification_to_location:
-    Location_A: "Building A"
-    Location_B: "Building B"
-    Remote: "Remote"
+    CH: "CH"
+    VN: "VN"
+    ES: "ES"
 
   classification_to_item:
-    Intranet: ["Business_Service", "Intranet"]
+    Intranet: ["Business_Service", "SharePoint Intranet"]
     Network: ["Business_Service", "Network Configuration"]
-    VPN: ["Software", "VPN Client"]
+    VPN: ["Software", "Ashwind VPN"]
     Teams: ["Software", "Microsoft Teams"]
 ```
 
@@ -219,17 +267,17 @@ Jira custom field IDs (use browser **Inspect** tool to find these in Jira HTML):
 
 ```yaml
 custom_fields:
-  classification: "customfield_10010"
-  reporter_details: "customfield_10020"
-  request_participants: "customfield_10030"
-  customer_request_type: "customfield_10040"
-  approvers: "customfield_10050"
-  approvals: "customfield_10060"
+  classification: "customfield_12010"
+  reporter_details: "customfield_11710"
+  request_participants: "customfield_10911"
+  customer_request_type: "customfield_10912"
+  approvers: "customfield_11011"
+  approvals: "customfield_10910"
 
   sla_fields:
-    - "customfield_10100"  # Time to assign
-    - "customfield_10101"  # In Progress
-    - "customfield_10102"  # In progress To Fixed
+    - "customfield_11512"  # Time to assign
+    - "customfield_11515"  # In Progress
+    - "customfield_11514"  # In progress To Fixed
 ```
 
 ---
@@ -297,7 +345,7 @@ python migrate_support_tickets.py
 2026-02-13 14:30:46 [INFO] migration: Initializing GLPI client...
 2026-02-13 14:30:47 [INFO] migration: Loading GLPI user cache...
 2026-02-13 14:30:50 [INFO] migration: Fetching issues (offset: 0, limit: 50)...
-2026-02-13 14:30:52 [INFO] migration: Processing ITSAMPLE-123: Unable to access VPN
+2026-02-13 14:30:52 [INFO] migration: Processing ITSDESK-123: Unable to access VPN
 2026-02-13 14:30:55 [INFO] migration:   -> Created Ticket ID: 4567
 ```
 
@@ -582,7 +630,7 @@ grep WARNING logs/migration_*.log
 
 ## 9. Limitations
 
-1. **GLPI generates new IDs**: Jira ticket keys (e.g., `ITSAMPLE-123`) are preserved in the description, but GLPI assigns new ticket IDs
+1. **GLPI generates new IDs**: Jira ticket keys (e.g., `ITSDESK-123`) are preserved in the description, but GLPI assigns new ticket IDs
 2. **Cannot create/sync users automatically**: Users must be imported manually or via LDAP before migration
 3. **Last Update field auto-updates**: GLPI updates this field automatically, so original Jira update date is only in description
 4. **Time to Own calculated by GLPI SLAs**: Cannot set historical values
@@ -598,7 +646,7 @@ grep WARNING logs/migration_*.log
 - [ ] Disable GLPI rules temporarily (to avoid auto-actions)
 - [ ] Disable GLPI authentication plugins (SSO, LDAP) if they interfere
 - [ ] Backup GLPI database
-- [ ] Test with debug mode first (`target_ticket_key: "ITSAMPLE-123"`)
+- [ ] Test with debug mode first (`target_ticket_key: "ITSDESK-123"`)
 - [ ] Run `list_classifications.py` to discover Jira classifications
 - [ ] Update `config.yaml` with correct classification mappings
 
@@ -667,8 +715,8 @@ python migrate_support_tickets.py
 
 ## 12. Support & Feedback
 
-**Issues**: Report bugs at my GitHub repository
+**Issues**: Report bugs at [GitHub Issues](https://github.com/your-org/it-agent/issues)
 
-**Questions**: Email me at thuong.lambale@gmail.com
+**Questions**: Contact IT Support team
 
 **Logs**: Always attach log files when reporting issues

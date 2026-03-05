@@ -15,6 +15,7 @@ class ConfigLoader:
 
     Supports:
     - YAML files (config.yaml)
+    - Python modules (config.py)
     - Environment variable overrides
     - Optional validation
     """

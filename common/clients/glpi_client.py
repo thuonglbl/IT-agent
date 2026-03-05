@@ -6,8 +6,23 @@ Supports: Knowledge Base, Tickets, Projects, Documents, Caching
 import requests
 import json
 import os
+import re
 import mimetypes
 import base64
+import unicodedata
+
+
+def _normalize_name(name):
+    """
+    Normalize a display name for fuzzy matching.
+    Strips accents, lowercases, collapses whitespace.
+    """
+    if not name:
+        return ""
+    # NFKD decomposition + strip accent marks
+    normalized = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+    # Lowercase and collapse whitespace
+    return re.sub(r'\s+', ' ', normalized.lower().strip())
 
 
 class GlpiClient:
@@ -50,6 +65,7 @@ class GlpiClient:
 
         # Caches
         self.user_cache = {}      # login_name (lowercase) -> user_id
+        self.fullname_cache = {}  # normalized fullname -> user_id
         self.group_cache = {}     # name (lowercase) -> group_id
         self.category_cache = {}  # name (lowercase) -> category_id (ITIL)
         self.location_cache = {}  # name (lowercase) -> location_id
@@ -155,6 +171,8 @@ class GlpiClient:
             "range": "0-10000",
             "forcedisplay[0]": "1",  # login
             "forcedisplay[1]": "2",  # id
+            "forcedisplay[2]": "9",  # realname (lastname)
+            "forcedisplay[3]": "34", # firstname
             "is_deleted": "0"        # Only active users
         }
         if recursive:
@@ -174,7 +192,17 @@ class GlpiClient:
                     if login and user_id:
                         self.user_cache[login] = user_id
 
-            print(f"-> Loaded {len(self.user_cache)} users into cache.")
+                    # Build fullname cache from realname (field 9) + firstname (field 34)
+                    # Note: GLPI field 9 stores the first/given name, field 34 stores the last/family name
+                    realname = str(item.get('9', '') or '').strip()
+                    firstname = str(item.get('34', '') or '').strip()
+                    if user_id and (firstname or realname):
+                        fullname = f"{realname} {firstname}".strip()
+                        normalized = _normalize_name(fullname)
+                        if normalized:
+                            self.fullname_cache[normalized] = user_id
+
+            print(f"-> Loaded {len(self.user_cache)} users, {len(self.fullname_cache)} fullnames into cache.")
 
         except Exception as e:
             print(f"[ERROR] Failed to load user cache: {e}")
@@ -193,6 +221,21 @@ class GlpiClient:
         if not username:
             return None
         return self.user_cache.get(username.lower())
+
+    def get_user_id_by_fullname(self, display_name):
+        """
+        Get GLPI User ID by display name (firstname + realname).
+        Uses pre-loaded fullname cache with unicode normalization.
+
+        Args:
+            display_name: User display name
+
+        Returns:
+            int: User ID or None
+        """
+        if not display_name:
+            return None
+        return self.fullname_cache.get(_normalize_name(display_name))
 
     # ===== Group Cache =====
 
@@ -250,6 +293,50 @@ class GlpiClient:
         if not group_name:
             return None
         return self.group_cache.get(group_name.lower())
+
+    def get_or_create_group(self, group_name):
+        """
+        Get GLPI Group ID by name. If not found, create it.
+
+        Args:
+            group_name: Group name
+
+        Returns:
+            int: Group ID or None
+        """
+        if not group_name:
+            return None
+
+        # Check cache first
+        group_id = self.group_cache.get(group_name.lower())
+        if group_id:
+            return group_id
+
+        # Create new group
+        print(f"  [NEW] Creating Group '{group_name}'...")
+        endpoint = f"{self.url}/Group"
+        payload = {
+            "input": {
+                "name": group_name,
+                "is_assign": 1,
+            }
+        }
+
+        try:
+            response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            response.raise_for_status()
+            result = response.json()
+            new_id = result.get('id')
+            if new_id:
+                self.group_cache[group_name.lower()] = new_id
+                print(f"  [NEW] Created Group '{group_name}' -> GLPI ID {new_id}")
+                return new_id
+            else:
+                print(f"  [ERROR] Group creation returned no ID: {result}")
+                return None
+        except Exception as e:
+            print(f"  [ERROR] Failed to create group '{group_name}': {e}")
+            return None
 
     # ===== Category Cache (ITIL Categories) =====
 

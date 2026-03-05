@@ -2,7 +2,7 @@
 HTML description generation for GLPI tickets
 """
 import re
-from lib.utils import format_glpi_date_friendly, format_comment_date
+from common.utils.dates import format_glpi_date_friendly, format_comment_date
 
 # HTML table styles
 TABLE_STYLE = 'border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;"'
@@ -206,7 +206,12 @@ def build_service_request_table(issue, config):
     if isinstance(request_type_data, dict):
         request_type_name = request_type_data.get('requestType', {}).get('name', 'N/A')
         customer_status = request_type_data.get('currentStatus', {}).get('status', 'N/A')
-        channel = request_type_data.get('requestType', {}).get('serviceDeskId', 'N/A')
+        # Derive channel from _links.web URL (e.g. /customer/portal/7/... -> Portal)
+        web_link = request_type_data.get('_links', {}).get('web', '')
+        if '/customer/portal/' in web_link:
+            channel = 'Portal'
+        else:
+            channel = 'Agent'
     else:
         request_type_name = str(request_type_data) if request_type_data else 'N/A'
         customer_status = 'N/A'

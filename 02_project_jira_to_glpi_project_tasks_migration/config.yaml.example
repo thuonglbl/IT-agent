@@ -17,34 +17,93 @@ jira:
   # Map custom field names to Jira field IDs (customfield_XXXXX)
   # Go to Project Settings > Fields > select schema > hover on "X screens" to get IDs
   custom_fields:
-    # Common Agile Fields
-    story_points: customfield_10010
-    acceptance_criteria: customfield_10020
-    scrum_team: customfield_10030
-    sprint: customfield_10040
-    epic_link: customfield_10050
-
-    # Risk & Priority
-    risk_level: customfield_10100
-    business_value: customfield_10110
-    severity: customfield_10120
-    root_cause: customfield_10130
-
-    # Dates
-    target_start_date: customfield_10200
-    target_end_date: customfield_10210
-    actual_start_date: customfield_10220
-    actual_end_date: customfield_10230
-
-    # External References
-    external_ticket_id: customfield_10300
-    legacy_project_code: customfield_10310
-    customer_name: customfield_10320
-
-    # People
-    approvers: customfield_10400
-    qa_owner: customfield_10410
-    business_analyst: customfield_10420
+    answer: customfield_10082
+    approvers: customfield_11011
+    automatic_test: customfield_34710
+    begin_date: customfield_35225
+    bug_cause: customfield_10083
+    business_id: customfield_10410
+    business_services: customfield_35910
+    business_value: customfield_10113
+    change_details: customfield_10080
+    classification: customfield_12010
+    complexity_points: customfield_10112
+    complexity_points_in_vn: customfield_10411
+    conditions: customfield_35230
+    contingency_plan: customfield_12119
+    contract_scope_status: customfield_10413
+    cucumber_scenario: customfield_35211
+    customer_request_type: customfield_10912
+    decision: customfield_11711
+    dr_impacted_by_change: customfield_34611
+    end_date: customfield_35226
+    epx_project: customfield_35510
+    estimated_story_points: customfield_10070
+    estimation: customfield_10415
+    expected_risk_costs: customfield_19810
+    expected_risk_costs_assumption: customfield_19811
+    feature_link: customfield_10211
+    feature_name: customfield_10212
+    feature_status: customfield_10213
+    figma_license: customfield_34810
+    flagged: customfield_12110
+    frequency: customfield_10030
+    generic_test_definition: customfield_35212
+    groups: customfield_35110
+    how_to_repeat: customfield_10010
+    how_to_test: customfield_10090
+    impact: customfield_12111
+    imputation: customfield_10040
+    manual_test_steps: customfield_35213
+    module: customfield_10412
+    organizations: customfield_10913
+    overdue_status: customfield_15311
+    pre_condition_type: customfield_35229
+    pre_conditions_association_with_a_test: customfield_35216
+    probability: customfield_12113
+    product_pr: customfield_10050
+    project_code: customfield_11415
+    project_manager: customfield_11416
+    queue: customfield_35610
+    realization: customfield_12120
+    reference: customfield_10081
+    reporter_details: customfield_11710
+    reporter_group: customfield_10091
+    request_participants: customfield_10911
+    requirement: customfield_10810
+    requirement_status: customfield_35231
+    residual_impact: customfield_12112
+    residual_probability: customfield_12114
+    revision: customfield_35227
+    risk_costs: customfield_17510
+    risk_costs_assumption: customfield_18010
+    root_cause: customfield_12210
+    scoped_labels: customfield_34910
+    security_component: customfield_10811
+    severity: customfield_12410
+    sprint: customfield_10210
+    sprint_ba: customfield_10414
+    substitute_manager: customfield_11414
+    test_environments: customfield_35233
+    test_plan: customfield_35235
+    test_plan_status: customfield_35236
+    test_plan_tests_filter: customfield_35239
+    test_plans_associated_with_a_test: customfield_35217
+    test_repository_path: customfield_35219
+    test_sets_association_with_a_test: customfield_35215
+    test_type: customfield_35210
+    tests_associated_with_a_test_plan: customfield_35234
+    tests_association_with_a_pre_condition: customfield_35232
+    tests_association_with_a_test_execution: customfield_35223
+    tests_association_with_a_test_set: customfield_35220
+    time_to_sla: customfield_15310
+    total_us_cp: customfield_12411
+    treatment: customfield_12117
+    treatment_costs: customfield_17512
+    treatment_costs_assumption: customfield_18011
+    treatment_plan: customfield_12118
+    urgency: customfield_10031
+    work_around_fix: customfield_10011
 
   # Color Mapping for Project States
   # Jira API returns color names (success, inprogress, default), GLPI expects hex values

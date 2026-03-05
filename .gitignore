@@ -23,4 +23,20 @@ config.yaml
 migration_state.json
 migration_state_tickets.json
 jira_glpi_id_map.json
-missing_users.txt
+
+# Claude Code
+.claude/
+
+# MCP configuration (contains credentials)
+.mcp.json
+
+# BMAD Framework
+_bmad/
+
+# Debug
+debug/
+
+# Agent workflows
+.agent/
+01_confluence_to_glpi_migration/confluence_contributors.csv
+common/missing_users.txt
