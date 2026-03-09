@@ -395,6 +395,27 @@ def main():
 
     log(f"=== Jira to GLPI Project Tasks Migration ===\n")
 
+    start_time_wall = datetime.datetime.now()
+    start_time_mono = time.monotonic()
+
+    def format_duration(seconds):
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        s = int(seconds % 60)
+        if h > 0:
+            return f"{h}h {m}m {s}s"
+        elif m > 0:
+            return f"{m}m {s}s"
+        else:
+            return f"{s}s"
+
+    def log_timing():
+        end_time_wall = datetime.datetime.now()
+        elapsed = time.monotonic() - start_time_mono
+        log(f"\nStart time:  {start_time_wall.strftime('%Y-%m-%d %H:%M:%S')}")
+        log(f"End time:    {end_time_wall.strftime('%Y-%m-%d %H:%M:%S')}")
+        log(f"Duration:    {format_duration(elapsed)}")
+
     # Extract config values
     jira_url = config.get('jira', {}).get('url', config.get('JIRA_URL', ''))
     jira_pat = config.get('jira', {}).get('pat', config.get('JIRA_PAT', ''))
@@ -438,6 +459,7 @@ def main():
         project_id = glpi.get_project_id_by_name(glpi_project_name)
         if not project_id:
             log(f"[ERROR] Project '{glpi_project_name}' not found!", "error")
+            log_timing()
             return
         log(f"✓ Found Project ID: {project_id}\n")
 
@@ -458,6 +480,7 @@ def main():
 
     except Exception as e:
         log(f"Connection Failed: {e}", "error")
+        log_timing()
         return
 
     # 2. Migration Loop
@@ -745,6 +768,7 @@ def main():
         state_manager.save(start_at, total_processed)
         raise
     finally:
+        log_timing()
         glpi.kill_session()
 
 
