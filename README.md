@@ -1,6 +1,7 @@
 # IT Agent System
 **Business Impact:** Successfully automated the migration from Atlassian to GLPI, saving £21,000/month in licensing fees, and reduced routine IT support tickets by 20%.
-**Tech Stack:** Python | LangGraph | n8n | OpenAI | RAG | GLPI
+
+**Tech Stack:** Python | LangGraph | n8n | DeepSeek | RAG | GLPI
 
 ## Project Objective
 1. Migrate data from Atlassian to GLPI
