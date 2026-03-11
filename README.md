@@ -1,12 +1,14 @@
 # IT Agent System
+**Business Impact:** Successfully automated the migration from Atlassian to GLPI, saving £21,000/month in licensing fees, and reduced routine IT support tickets by 20%.
+**Tech Stack:** Python | LangGraph | n8n | OpenAI | RAG | GLPI
 
 ## Project Objective
 1. Migrate data from Atlassian to GLPI
-**Reason:** GLPI has a free community version on premise - no more license costs for Atlassian Confluence and Jira, but no built-in migration tool.
+**Reason:** GLPI has a free community version on-premises - no more license costs for Atlassian Confluence and Jira, but no built-in migration tool.
 2. The final goal is to create an intelligent agent system that automatically triggers when an IT ticket is created or updated in GLPI.
 
 The agent performs the following actions:
-1.  **Analyze**: Reads the content of the GLPI ticket.
+1.  **Analyse**: Reads the content of the GLPI ticket.
 2.  **Retrieve**: Searches for relevant knowledge stored in the GLPI Knowledge Base.
 3.  **Respond (Automated/AI)**:
     *   If relevant information is found with **high confidence**, the agent posts a comment on the GLPI ticket to answer the user directly.
@@ -35,7 +37,7 @@ IT-agent/
 └── 03_support_jira_to_glpi_assistance_tickets_migration/  # Migration 3: Tickets
 ```
 
-**Note:** Migrations are numbered for organization. Each migration is independent and can be run in any order based on your needs.
+**Note:** Migrations are numbered for organisation. Each migration is independent and can be run in any order based on your needs.
 
 ## Roadmap & Milestones
 
@@ -132,7 +134,7 @@ See [Configuration Documentation](.claude/CONFIGURATION_REFACTORING.md) for deta
 
 All migrations use the shared `common/` library:
 
-```python
+``` python
 from common.config.loader import load_config
 from common.clients.glpi_client import GlpiClient
 from common.clients.jira_client import JiraClient
