@@ -14,7 +14,7 @@ venv/
 
 # Project Sensitive Config
 config.py
-config.yaml
+config*.yaml
 *.pem
 *.key
 *.log
