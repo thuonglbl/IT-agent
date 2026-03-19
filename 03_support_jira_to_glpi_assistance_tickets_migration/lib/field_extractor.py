@@ -56,19 +56,19 @@ def extract_actors(issue, glpi_client, logger, user_tracker):
     fields = issue['fields']
 
     # Reporter
-    reporter_jira = (fields.get('reporter') or {}).get('name')
+    reporter_jira = (fields.get('reporter') or {}).get('emailAddress') or (fields.get('reporter') or {}).get('name')
     reporter_display = (fields.get('reporter') or {}).get('displayName', reporter_jira)
 
-    requester_id = glpi_client.get_user_id_by_name(reporter_jira) if reporter_jira else None
+    requester_id = glpi_client.get_user_id_by_email(reporter_jira) if reporter_jira else None
     if reporter_jira and not requester_id:
         user_tracker.report_missing_user(reporter_jira, reporter_display)
         logger.warning(f"Reporter not found in GLPI: {reporter_jira}")
 
     # Assignee
-    assignee_jira = (fields.get('assignee') or {}).get('name')
+    assignee_jira = (fields.get('assignee') or {}).get('emailAddress') or (fields.get('assignee') or {}).get('name')
     assignee_display = (fields.get('assignee') or {}).get('displayName', assignee_jira) or 'Unassigned'
 
-    assignee_id = glpi_client.get_user_id_by_name(assignee_jira) if assignee_jira else None
+    assignee_id = glpi_client.get_user_id_by_email(assignee_jira) if assignee_jira else None
     if assignee_jira and not assignee_id:
         user_tracker.report_missing_user(assignee_jira, assignee_display)
         logger.warning(f"Assignee not found in GLPI: {assignee_jira}")
@@ -162,11 +162,11 @@ def extract_participants(issue, config, glpi_client, logger, user_tracker):
 
     if isinstance(participants_raw, list):
         for p in participants_raw:
-            p_login = p.get('name', '')
-            p_display = p.get('displayName', p_login)
+            p_login = p.get('emailAddress') or p.get('name', '')
+            p_display = p.get('displayName', p.get('name', ''))
             participant_names.append(p_display)
 
-            p_id = glpi_client.get_user_id_by_name(p_login)
+            p_id = glpi_client.get_user_id_by_email(p_login)
             if p_id:
                 participant_ids.append(p_id)
             elif p_login:

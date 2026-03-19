@@ -310,11 +310,11 @@ def build_history_table(issue, glpi_client, config):
     for history in reversed(histories):
         author = history.get('author', {})
         author_name = author.get('displayName', 'Unknown')
-        author_key = author.get('name', '')
+        author_key = author.get('emailAddress') or author.get('name', '')
         created_str = format_comment_date(history.get('created'))
 
         # Link to User in GLPI
-        user_id = glpi_client.get_user_id_by_name(author_key)
+        user_id = glpi_client.get_user_id_by_email(author_key)
 
         if user_id:
             user_link = f'<a href="{base_url}/front/user.form.php?id={user_id}">{author_name}</a>'
@@ -345,11 +345,11 @@ def build_history_table(issue, glpi_client, config):
     fields = issue.get('fields', {})
     reporter = fields.get('reporter', {})
     reporter_name = reporter.get('displayName', 'Unknown')
-    reporter_key = reporter.get('name', '')
+    reporter_key = reporter.get('emailAddress') or reporter.get('name', '')
     created_date = format_comment_date(fields.get('created'))
 
     # Link Reporter
-    rep_id = glpi_client.get_user_id_by_name(reporter_key)
+    rep_id = glpi_client.get_user_id_by_email(reporter_key)
     if rep_id:
         rep_link = f'<a href="{base_url}/front/user.form.php?id={rep_id}">{reporter_name}</a>'
     else:

@@ -54,7 +54,7 @@ def process_single_comment(comment, ticket_id, attachment_map, glpi_client, conf
     """
     # Extract comment data
     author_display = (comment.get('author') or {}).get('displayName', 'Unknown')
-    author_jira = (comment.get('author') or {}).get('name')
+    author_jira = (comment.get('author') or {}).get('emailAddress') or (comment.get('author') or {}).get('name')
     body = comment.get('body', '')
     created = parse_jira_date(comment.get('created'))
 
@@ -117,7 +117,7 @@ def get_comment_author_id(author_jira, author_display, glpi_client, logger, user
     if not author_jira:
         return None
 
-    author_id = glpi_client.get_user_id_by_name(author_jira)
+    author_id = glpi_client.get_user_id_by_email(author_jira)
 
     if not author_id:
         logger.warning(f"Comment author '{author_jira}' not found in GLPI. Will be posted by API user.")

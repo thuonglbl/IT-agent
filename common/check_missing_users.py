@@ -41,15 +41,16 @@ def collect_project_users(jira, project_key):
         project_key: Jira project key
 
     Returns:
-        dict: {login: {'display_name': str, 'issues': set()}}
+        dict: {login: {'display_name': str, 'email': str, 'issues': set()}}
     """
     users = {}
     raw_users = jira.get_project_users(project_key)
     for u in raw_users:
         login = u.get('name') or u.get('key')
         display = u.get('displayName', login)
+        email = u.get('emailAddress') or login  # Use email if available, fallback to login
         if login:
-            users[login] = {'display_name': display, 'issues': set()}
+            users[login] = {'display_name': display, 'email': email, 'issues': set()}
     print(f"  [Assignable] {len(users)} users from {project_key}")
     return users
 
@@ -65,7 +66,7 @@ def collect_issue_users(jira, project_key, batch_size=100):
         batch_size: Number of issues per API page
 
     Returns:
-        dict: {login: {'display_name': str, 'issues': set(issue_keys)}}
+        dict: {login: {'display_name': str, 'email': str, 'issues': set(issue_keys)}}
     """
     users = {}
     jql = f"project = {project_key} ORDER BY key ASC"
@@ -92,9 +93,14 @@ def collect_issue_users(jira, project_key, batch_size=100):
                 if person:
                     login = person.get('name') or person.get('key')
                     display = person.get('displayName', login)
+                    email = person.get('emailAddress') or login  # Prefer email, fallback to login
                     if login:
                         if login not in users:
-                            users[login] = {'display_name': display, 'issues': set()}
+                            users[login] = {'display_name': display, 'email': email, 'issues': set()}
+                        else:
+                            # Update email if we now have a real one (not just login)
+                            if email != login and users[login].get('email') == login:
+                                users[login]['email'] = email
                         if issue_key:
                             users[login]['issues'].add(issue_key)
 
@@ -116,19 +122,24 @@ def merge_users(target, source):
     for login, info in source.items():
         if login in target:
             target[login]['issues'] |= info['issues']
+            # Update email if source has a real email (not just login fallback)
+            src_email = info.get('email', login)
+            if src_email != login and target[login].get('email', login) == login:
+                target[login]['email'] = src_email
         else:
             target[login] = {
                 'display_name': info['display_name'],
+                'email': info.get('email', login),
                 'issues': set(info['issues']),
             }
 
 
 def check_against_glpi(users_dict, glpi):
     """
-    Check each Jira user against GLPI user cache, return missing logins.
+    Check each Jira user against GLPI user cache by email, return missing logins.
 
     Args:
-        users_dict: {login: {'display_name': str, 'issues': set()}}
+        users_dict: {login: {'display_name': str, 'email': str, 'issues': set()}}
         glpi: GlpiClient instance (with user cache loaded)
 
     Returns:
@@ -136,7 +147,13 @@ def check_against_glpi(users_dict, glpi):
     """
     missing = []
     for login in sorted(users_dict.keys()):
-        glpi_id = glpi.get_user_id_by_name(login)
+        info = users_dict[login]
+        # Look up by email address (preferred) with login as fallback
+        email = info.get('email', login)
+        glpi_id = glpi.get_user_id_by_email(email)
+        if glpi_id is None and email != login:
+            # Try login as email fallback (some environments use login as email)
+            glpi_id = glpi.get_user_id_by_email(login)
         if glpi_id is None:
             missing.append(login)
     return missing

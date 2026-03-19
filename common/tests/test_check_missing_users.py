@@ -333,7 +333,7 @@ class TestCheckAgainstGlpi(unittest.TestCase):
     def test_all_users_found(self):
         """Test when all Jira users exist in GLPI."""
         mock_glpi = Mock()
-        mock_glpi.get_user_id_by_name.return_value = 42
+        mock_glpi.get_user_id_by_email.return_value = 42
 
         users = {
             'john.doe': {'display_name': 'John Doe', 'issues': set()},
@@ -346,7 +346,7 @@ class TestCheckAgainstGlpi(unittest.TestCase):
     def test_all_users_missing(self):
         """Test when no Jira users exist in GLPI."""
         mock_glpi = Mock()
-        mock_glpi.get_user_id_by_name.return_value = None
+        mock_glpi.get_user_id_by_email.return_value = None
 
         users = {
             'john.doe': {'display_name': 'John Doe', 'issues': set()},
@@ -359,7 +359,7 @@ class TestCheckAgainstGlpi(unittest.TestCase):
     def test_partial_missing(self):
         """Test when some users exist and some don't."""
         mock_glpi = Mock()
-        mock_glpi.get_user_id_by_name.side_effect = lambda name: {
+        mock_glpi.get_user_id_by_email.side_effect = lambda name: {
             'john.doe': 10,
             'jane.smith': None,
             'bob.jones': 20,
@@ -381,7 +381,7 @@ class TestCheckAgainstGlpi(unittest.TestCase):
         result = check_against_glpi({}, mock_glpi)
 
         self.assertEqual(result, [])
-        mock_glpi.get_user_id_by_name.assert_not_called()
+        mock_glpi.get_user_id_by_email.assert_not_called()
 
 
 class TestCheckAdStatus(unittest.TestCase):
@@ -856,7 +856,7 @@ class TestMainFlow(unittest.TestCase):
         mock_glpi = Mock()
         mock_glpi_cls.return_value = mock_glpi
         mock_glpi.user_cache = {'alice': 1}
-        mock_glpi.get_user_id_by_name.side_effect = lambda name: {
+        mock_glpi.get_user_id_by_email.side_effect = lambda name: {
             'alice': 1,
         }.get(name.lower())
 
@@ -914,7 +914,7 @@ class TestMainFlow(unittest.TestCase):
         mock_glpi = Mock()
         mock_glpi_cls.return_value = mock_glpi
         mock_glpi.user_cache = {}
-        mock_glpi.get_user_id_by_name.return_value = None
+        mock_glpi.get_user_id_by_email.return_value = None
 
         mock_get_ldap.return_value = None
         mock_check_ad.return_value = "Deleted from AD"
@@ -965,7 +965,7 @@ class TestMainFlow(unittest.TestCase):
         mock_glpi = Mock()
         mock_glpi_cls.return_value = mock_glpi
         mock_glpi.user_cache = {}
-        mock_glpi.get_user_id_by_name.return_value = None
+        mock_glpi.get_user_id_by_email.return_value = None
 
         mock_get_ldap.return_value = None
         mock_check_ad.return_value = "Deleted from AD"
@@ -1007,7 +1007,7 @@ class TestMainFlow(unittest.TestCase):
         mock_glpi = Mock()
         mock_glpi_cls.return_value = mock_glpi
         mock_glpi.user_cache = {'alice': 1}
-        mock_glpi.get_user_id_by_name.return_value = 1
+        mock_glpi.get_user_id_by_email.return_value = 1
 
         test_args = ['check_missing_users.py', 'PROJ', '--skip-issues', '-o', self.output_file]
         with patch('sys.argv', test_args):
@@ -1054,7 +1054,7 @@ class TestMainFlow(unittest.TestCase):
         mock_glpi = Mock()
         mock_glpi_cls.return_value = mock_glpi
         mock_glpi.user_cache = {}
-        mock_glpi.get_user_id_by_name.return_value = None
+        mock_glpi.get_user_id_by_email.return_value = None
 
         mock_get_ldap.return_value = None
         mock_check_ad.return_value = "Deleted from AD"
@@ -1102,7 +1102,7 @@ class TestMainFlow(unittest.TestCase):
         mock_glpi = Mock()
         mock_glpi_cls.return_value = mock_glpi
         mock_glpi.user_cache = {}
-        mock_glpi.get_user_id_by_name.return_value = None
+        mock_glpi.get_user_id_by_email.return_value = None
 
         ldap_cfg = {'host': 'ad.test', 'port': 389, 'basedn': 'DC=test,DC=local'}
         mock_get_ldap.return_value = ldap_cfg
@@ -1168,7 +1168,7 @@ class TestMainEdgeCases(unittest.TestCase):
         mock_glpi = Mock()
         mock_glpi_cls.return_value = mock_glpi
         mock_glpi.user_cache = {}
-        mock_glpi.get_user_id_by_name.return_value = None
+        mock_glpi.get_user_id_by_email.return_value = None
 
         mock_get_ldap.return_value = None
 

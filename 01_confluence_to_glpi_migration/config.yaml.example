@@ -7,6 +7,9 @@
 confluence:
   # Path to Confluence HTML export directory
   export_dir: "./confluence-export"
+  # Base URL of the Confluence instance (used to build "View on Confluence" links)
+  # Leave empty to disable source links
+  base_url: 'your_confluence_base_url'
 
 # Cleanup Settings
 cleanup:

@@ -20,11 +20,6 @@ migration:
   # Lists Jira users not found in GLPI during migration
   missing_users_file: "missing_users.txt"
 
-  # Debug settings
-  debug:
-    enabled: false
-    target_ticket_key: "SUPPORT-123"
-
 # ===== Field Mappings =====
 mappings:
   # ===== Status Mapping =====

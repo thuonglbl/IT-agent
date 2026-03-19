@@ -223,3 +223,78 @@ def test_resolve_metadata_no_metadata_div():
         assert result == []
     finally:
         os.unlink(temp_path)
+
+
+# ===== Confluence URL Builder Tests =====
+
+def _make_paths(export_dir, space_key, filename):
+    """Helper: return (file_path, export_dir) for a fake export structure."""
+    file_path = os.path.join(export_dir, space_key, filename)
+    return file_path, export_dir
+
+
+def test_build_confluence_url_standard():
+    """Normal file produces a valid Confluence URL."""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '01_confluence_to_glpi_migration'))
+    from main import build_confluence_url
+
+    export_dir = r'C:\export'
+    file_path, export_dir = _make_paths(export_dir, 'MYSPACE', '1.-How-to-Do-Something_1234567890.html')
+    page_id, url = build_confluence_url(file_path, export_dir, 'https://confluence.example.com')
+
+    assert page_id == '1234567890'
+    assert url == 'https://confluence.example.com/spaces/MYSPACE/pages/1234567890/1.+How+to+Do+Something'
+
+
+def test_build_confluence_url_no_base_url():
+    """Empty base_url returns (page_id, None)."""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '01_confluence_to_glpi_migration'))
+    from main import build_confluence_url
+
+    export_dir = r'C:\export'
+    file_path, export_dir = _make_paths(export_dir, 'MYSPACE', 'Some-Page_999.html')
+    page_id, url = build_confluence_url(file_path, export_dir, '')
+
+    assert page_id == '999'
+    assert url is None
+
+
+def test_build_confluence_url_no_page_id():
+    """Filename without _<digits>.html pattern returns (None, None)."""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '01_confluence_to_glpi_migration'))
+    from main import build_confluence_url
+
+    export_dir = r'C:\export'
+    file_path, export_dir = _make_paths(export_dir, 'MYSPACE', 'index.html')
+    page_id, url = build_confluence_url(file_path, export_dir, 'https://confluence.example.com')
+
+    assert page_id is None
+    assert url is None
+
+
+def test_build_confluence_url_nested_path():
+    """File in nested sub-folder: space_key is still the first folder under export_dir."""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '01_confluence_to_glpi_migration'))
+    from main import build_confluence_url
+
+    export_dir = r'C:\export'
+    # Nested: export_dir / SPACE / subfolder / file.html
+    file_path = os.path.join(export_dir, 'SPACE', 'subfolder', 'Deep-Page_42.html')
+    page_id, url = build_confluence_url(file_path, export_dir, 'https://conf.example.com')
+
+    assert page_id == '42'
+    assert url.startswith('https://conf.example.com/spaces/SPACE/pages/42/')
+
+
+def test_build_confluence_url_trailing_slash():
+    """base_url with trailing slash produces no double-slash in URL."""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '01_confluence_to_glpi_migration'))
+    from main import build_confluence_url
+
+    export_dir = r'C:\export'
+    file_path, export_dir = _make_paths(export_dir, 'SPACE', 'My-Page_77.html')
+    page_id, url = build_confluence_url(file_path, export_dir, 'https://confluence.example.com/')
+
+    assert '//' not in url.replace('https://', '')
+    assert url == 'https://confluence.example.com/spaces/SPACE/pages/77/My+Page'
+

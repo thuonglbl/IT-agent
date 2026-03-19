@@ -156,6 +156,31 @@ class GlpiClient:
             print(f"Failed to switch profile to {profile_id}: {e}")
             return False
 
+    def change_active_entity(self, entity_id=0, is_recursive=True):
+        """
+        Switch the active entity for the session.
+
+        Args:
+            entity_id: Entity ID (default: 0 = root)
+            is_recursive: Include sub-entities (default: True)
+
+        Returns:
+            bool: True if successful
+        """
+        endpoint = f"{self.url}/changeActiveEntities"
+        payload = {
+            "entities_id": entity_id,
+            "is_recursive": 1 if is_recursive else 0
+        }
+        try:
+            response = requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            response.raise_for_status()
+            print(f"Switched to entity ID {entity_id} (recursive={is_recursive}).")
+            return True
+        except Exception as e:
+            print(f"Failed to switch entity to {entity_id}: {e}")
+            return False
+
     # ===== User Cache =====
 
     def load_user_cache(self, recursive=True):
@@ -169,7 +194,7 @@ class GlpiClient:
         endpoint = f"{self.url}/search/User"
         params = {
             "range": "0-10000",
-            "forcedisplay[0]": "1",  # login
+            "forcedisplay[0]": "5",  # email
             "forcedisplay[1]": "2",  # id
             "forcedisplay[2]": "9",  # realname (lastname)
             "forcedisplay[3]": "34", # firstname
@@ -187,10 +212,10 @@ class GlpiClient:
 
             if data:
                 for item in data:
-                    login = str(item.get('1', '')).lower().strip()
+                    email = str(item.get('5', '')).lower().strip()
                     user_id = item.get('2')
-                    if login and user_id:
-                        self.user_cache[login] = user_id
+                    if email and user_id:
+                        self.user_cache[email] = user_id
 
                     # Build fullname cache from realname (field 9) + firstname (field 34)
                     # Note: GLPI field 9 stores the first/given name, field 34 stores the last/family name
@@ -207,20 +232,20 @@ class GlpiClient:
         except Exception as e:
             print(f"[ERROR] Failed to load user cache: {e}")
 
-    def get_user_id_by_name(self, username):
+    def get_user_id_by_email(self, email):
         """
-        Get GLPI User ID by login name.
+        Get GLPI User ID by email address.
         Uses pre-loaded cache for O(1) lookup.
 
         Args:
-            username: User login name
+            email: User email address
 
         Returns:
             int: User ID or None
         """
-        if not username:
+        if not email:
             return None
-        return self.user_cache.get(username.lower())
+        return self.user_cache.get(email.lower())
 
     def get_user_id_by_fullname(self, display_name):
         """
@@ -572,26 +597,85 @@ class GlpiClient:
             int: Category ID or None
         """
         endpoint = f"{self.url}/KnowbaseItemCategory"
+
+        # --- Pass 1: search with searchText filter ---
         params = {
             "is_deleted": 0,
             "searchText": name,
-            "range": "0-100"
+            "range": "0-1000",
+            "is_recursive": 1
         }
-
         try:
             response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
             if response.status_code == 200:
                 data = response.json()
-                if isinstance(data, list):
+                if isinstance(data, list) and data:
                     for item in data:
                         if item.get("name") == name:
                             item_parent = item.get("knowbaseitemcategories_id", 0)
                             if int(item_parent) == int(parent_id):
                                 return item.get("id")
+                else:
+                    print(f"  [DEBUG] KnowbaseItemCategory searchText='{name}' returned: {data}")
         except Exception as e:
             print(f"Error searching KB category {name}: {e}")
 
+        # --- Pass 2: fallback — fetch ALL via direct endpoint (limited to current entity) ---
+        print(f"  [DEBUG] Falling back to full scan for KB category '{name}' (parent_id={parent_id})...")
+        try:
+            params_all = {
+                "is_deleted": 0,
+                "range": "0-5000",
+                "is_recursive": 1
+            }
+            response = requests.get(endpoint, headers=self.headers, params=params_all, verify=self.verify_ssl)
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    print(f"  [DEBUG] Full scan returned {len(data)} categories")
+                    for item in data:
+                        if item.get("name") == name:
+                            item_parent = item.get("knowbaseitemcategories_id", 0)
+                            print(f"  [DEBUG] Found match: '{name}' with parent={item_parent} (looking for parent={parent_id}), id={item.get('id')}")
+                            if int(item_parent) == int(parent_id):
+                                return item.get("id")
+                else:
+                    print(f"  [DEBUG] Full scan returned non-list: {data}")
+        except Exception as e:
+            print(f"Error in full-scan for KB category {name}: {e}")
+
+        # --- Pass 3: use /search/ endpoint (cross-entity, recursive) ---
+        print(f"  [DEBUG] Trying /search/ endpoint for KB category '{name}'...")
+        try:
+            search_endpoint = f"{self.url}/search/KnowbaseItemCategory"
+            search_params = {
+                "criteria[0][field]": "1",        # name field
+                "criteria[0][searchtype]": "equals",
+                "criteria[0][value]": name,
+                "forcedisplay[0]": "1",           # name
+                "forcedisplay[1]": "2",           # id
+                "forcedisplay[2]": "3",           # parent category id
+                "range": "0-1000",
+                "is_recursive": 1
+            }
+            response = requests.get(search_endpoint, headers=self.headers, params=search_params, verify=self.verify_ssl)
+            if response.status_code == 200:
+                result = response.json()
+                data = result.get('data', [])
+                print(f"  [DEBUG] /search/ returned {len(data)} results")
+                for item in data:
+                    item_name = str(item.get('1', ''))
+                    item_id = item.get('2')
+                    item_parent = item.get('3', 0) or 0
+                    print(f"  [DEBUG] search result: name='{item_name}', id={item_id}, parent={item_parent}")
+                    if item_name == name:
+                        if int(item_parent) == int(parent_id):
+                            return item_id
+        except Exception as e:
+            print(f"Error in /search/ for KB category {name}: {e}")
+
         return None
+
 
     def create_kb_category(self, name, parent_id=0):
         """

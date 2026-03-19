@@ -6,6 +6,7 @@ glpi:
   url: "https://your-glpi-server.com/api.php/v1"
   app_token: "YOUR_GLPI_APP_TOKEN"
   user_token: "YOUR_GLPI_USER_TOKEN"
+  email: "YOUR_GLPI_EMAIL" # to test connection by test_curl.py
   username: "your_username"  # Optional: for Basic Auth fallback
   password: "your_password"  # Optional: for Basic Auth fallback
   verify_ssl: "path_to_ssl_certificate"  # Path to SSL certificate, or false to disable

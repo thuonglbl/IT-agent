@@ -296,13 +296,9 @@ def main():
         logger.info(f"Resuming from offset {start_at}, {total_processed} processed so far")
 
         # Debug mode configuration
-        debug_config = migration_config.get('debug', {})
-        debug_enabled = debug_config.get('enabled', False)
-        debug_ticket = debug_config.get('target_ticket_key') if debug_enabled else None
+        debug_enabled = migration_config.get('debug', False)
 
-        if debug_ticket:
-            logger.info(f"[DEBUG MODE] Targeting single ticket: {debug_ticket}")
-        elif debug_enabled:
+        if debug_enabled:
             logger.info("[DEBUG MODE] Will process 1 batch and exit")
 
         # Main migration loop
@@ -311,16 +307,11 @@ def main():
 
         while True:
             # Build JQL query
-            if debug_ticket:
-                jql = f"key = {debug_ticket}"
-                search_start = 0
-            else:
-                jql = f"project = {project_key} ORDER BY key ASC"
-                search_start = start_at
+            jql = f"project = {project_key} ORDER BY key ASC"
 
             # Fetch issues from Jira
-            logger.info(f"Fetching issues (offset: {search_start}, limit: {batch_size})...")
-            issues, total = jira.search_issues(jql, start_at=search_start, max_results=batch_size)
+            logger.info(f"Fetching issues (offset: {start_at}, limit: {batch_size})...")
+            issues, total = jira.search_issues(jql, start_at=start_at, max_results=batch_size)
 
             if not issues:
                 logger.info("No more issues to process")
@@ -334,19 +325,14 @@ def main():
                     process_issue(jira, glpi, issue, status_mapping, config, logger, user_tracker)
                     total_processed += 1
 
-                    # Debug mode: process 1 and exit
-                    if debug_enabled and not debug_ticket:
+                    # Debug mode: process 1 batch and exit
+                    if debug_enabled:
                         logger.info("[DEBUG] Processed 1 issue. Exiting.")
                         save_state(state_file, start_at + 1, total_processed)
                         return
 
                 except Exception as e:
                     logger.error(f"Failed to process issue {issue.get('key', 'UNKNOWN')}: {e}", exc_info=True)
-
-            # Check if debug_ticket mode (process only that ticket)
-            if debug_ticket:
-                logger.info("[DEBUG MODE] Finished target ticket")
-                break
 
             # Update state
             start_at += len(issues)

@@ -16,8 +16,6 @@ This script automates the migration of Jira Support Issues to GLPI Assistance Ti
 ## 1. Directory Structure
 
 Inside the `03_support_jira_to_glpi_assistance_tickets_migration` folder, you will find:
-
-```
 03_support_jira_to_glpi_assistance_tickets_migration/
 ├── config.yaml.example         # Template configuration (copy to config.yaml)
 ├── config.yaml                 # Your configuration (create from example)
@@ -29,10 +27,8 @@ Inside the `03_support_jira_to_glpi_assistance_tickets_migration` folder, you wi
 ├── missing_users.txt           # Auto-generated missing users report
 └── logs/                       # Auto-created log directory
     └── migration_*.log         # Timestamped log files
-```
 
 **Common Library** (shared across all migrations):
-```
 common/
 ├── clients/
 │   ├── glpi_client.py          # GLPI API client (Ticket/Assistance operations)
@@ -52,9 +48,9 @@ common/
 │   └── migration_reporter.py   # Progress reporting
 └── logging/
     └── logger.py               # Structured logging
-```
 
 **Configuration Files**:
+
 - `common/config.yaml`: Shared credentials (GLPI tokens, Jira PAT, batch size, logging)
 - `common/glpi.pem`: SSL certificate for GLPI (if using self-signed certificates)
 - `03_support_jira_to_glpi_assistance_tickets_migration/config.yaml`: Ticket-specific settings (project key, status/type/priority mappings, classification mappings, custom field IDs)
@@ -66,11 +62,13 @@ common/
 ### 2.1. Install Python
 
 Ensure Python 3.8+ is installed on your system:
+
 ```bash
 python --version
 ```
 
 If not installed, install Python silently (without GUI):
+
 ```bash
 python-installer.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
 ```
@@ -78,11 +76,13 @@ python-installer.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
 ### 2.2. Install Dependencies
 
 Open a Command Prompt or Terminal in the project folder and run:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 This installs:
+
 - `requests`: HTTP client for API calls
 - `pyyaml`: YAML configuration parsing
 - `paramiko`: SSH/SFTP library (for advanced features)
@@ -95,6 +95,7 @@ For the script to correctly map **Reporters (Requesters)** and **Assignees (Tech
 #### Import Users from LDAP
 
 **Before running this migration**, ensure all users are imported into GLPI:
+
 1. Go to **Administration > Users > LDAP Directory Link** in GLPI
 2. Or use automated import: `02_project_jira_to_glpi_project_tasks_migration/import_ldap_playwright.py`
 
@@ -105,6 +106,7 @@ For the script to correctly map **Reporters (Requesters)** and **Assignees (Tech
 ### 2.4. Jira Configuration (PAT)
 
 You need a **Personal Access Token (PAT)** from Jira:
+
 1. Log in to Jira
 2. Go to **Profile > Personal Access Tokens**
 3. Click **Create Token**
@@ -115,11 +117,13 @@ You need a **Personal Access Token (PAT)** from Jira:
 You need an **App-Token** and **User-Token** from GLPI:
 
 **App-Token**:
+
 1. Go to **Setup > General > API**
 2. Click **Add API client**
 3. Enable **API Client** and save the generated **App-Token**
 
 **User-Token**:
+
 1. Go to your user profile: **My Settings > Remote access keys**
 2. Generate a new **API token**
 3. Save the **User-Token**
@@ -129,12 +133,14 @@ You need an **App-Token** and **User-Token** from GLPI:
 ## 3. Configuration Setup
 
 This project uses **two-level configuration inheritance**:
+
 1. **Common config** (`common/config.yaml`): Shared GLPI/Jira credentials, batch size, logging
 2. **Folder config** (`03_support_jira_to_glpi_assistance_tickets_migration/config.yaml`): Ticket-specific mappings and settings
 
 ### 3.1. Configure Common Settings
 
 Copy and edit the common configuration:
+
 ```bash
 cd common
 cp config.yaml.example config.yaml
@@ -168,10 +174,12 @@ logging:
 ```
 
 **Debug Mode**:
+
 - `debug: false` → Process all tickets (full migration)
 - `debug: true` → Process only 1 batch (batch_size tickets) for testing
 
 **SSL Certificate**:
+
 - Place your `glpi.pem` certificate in the `common/` folder
 - Or set `verify_ssl: true` to use system certificates
 - Or set `verify_ssl: false` to disable verification (not recommended)
@@ -179,6 +187,7 @@ logging:
 ### 3.2. Configure Ticket-Specific Settings
 
 Copy and edit the folder configuration:
+
 ```bash
 cd 03_support_jira_to_glpi_assistance_tickets_migration
 cp config.yaml.example config.yaml
@@ -205,17 +214,20 @@ migration:
 ```
 
 **Debug Modes**:
+
 1. **Process One Batch**: Set `migration.debug: true` in `common/config.yaml` to process only 1 batch (50 tickets)
 2. **Target Specific Ticket**: Set `jira_debug_ticket_key: "SUPPORT-123"` in this config to migrate only that ticket
 
 #### 3.2.3. Field Mappings
 
 The configuration includes mappings for:
+
 - **Status**: Jira status → GLPI status ID
 - **Type**: Jira issue type → GLPI ticket type (1=Incident, 2=Request)
 - **Priority**: Jira priority → [Urgency, Impact] scale
 
 Example:
+
 ```yaml
 mappings:
   status:
@@ -255,6 +267,7 @@ mappings:
 ```
 
 **How to discover classifications**:
+
 ```bash
 python list_classifications.py
 ```
@@ -298,6 +311,7 @@ You can override sensitive credentials using environment variables instead of ed
 ### 4.2. Example Usage
 
 **Windows (CMD)**:
+
 ```cmd
 set JIRA_PAT=your_token_here
 set GLPI_USER_TOKEN=your_token_here
@@ -305,6 +319,7 @@ python migrate_support_tickets.py
 ```
 
 **Windows (PowerShell)**:
+
 ```powershell
 $env:JIRA_PAT="your_token_here"
 $env:GLPI_USER_TOKEN="your_token_here"
@@ -312,6 +327,7 @@ python migrate_support_tickets.py
 ```
 
 **Linux/Mac**:
+
 ```bash
 export JIRA_PAT=your_token_here
 export GLPI_USER_TOKEN=your_token_here
@@ -325,11 +341,13 @@ python migrate_support_tickets.py
 ### 5.1. Initial Run
 
 Execute the migration script:
+
 ```bash
 python migrate_support_tickets.py
 ```
 
 **What happens**:
+
 1. Loads configuration from `config.yaml`
 2. Initializes Jira and GLPI clients
 3. Loads GLPI caches (users, groups, categories, locations)
@@ -339,27 +357,28 @@ python migrate_support_tickets.py
 7. Saves progress after each batch
 
 **Console output**:
-```
+
 2026-02-13 14:30:45 [INFO] migration: === Jira Support to GLPI Assistance Migration v2.0 ===
 2026-02-13 14:30:45 [INFO] migration: Initializing Jira client...
 2026-02-13 14:30:46 [INFO] migration: Initializing GLPI client...
 2026-02-13 14:30:47 [INFO] migration: Loading GLPI user cache...
 2026-02-13 14:30:50 [INFO] migration: Fetching issues (offset: 0, limit: 50)...
-2026-02-13 14:30:52 [INFO] migration: Processing ITSDESK-123: Unable to access VPN
+2026-02-13 14:30:52 [INFO] migration: Processing SUPPORT-123: Unable to access VPN
 2026-02-13 14:30:55 [INFO] migration:   -> Created Ticket ID: 4567
-```
 
 ### 5.2. Debug Mode
 
 #### Debug Mode 1: Process One Batch
 
 Edit `common/config.yaml`:
+
 ```yaml
 migration:
   debug: true
 ```
 
 Run migration:
+
 ```bash
 python migrate_support_tickets.py
 ```
@@ -369,12 +388,14 @@ This will process **1 batch** (50 tickets by default) and exit.
 #### Debug Mode 2: Target Specific Ticket
 
 Edit `03_support_jira_to_glpi_assistance_tickets_migration/config.yaml`:
+
 ```yaml
 migration:
   jira_debug_ticket_key: "SUPPORT-123"
 ```
 
 Run migration:
+
 ```bash
 python migrate_support_tickets.py
 ```
@@ -386,17 +407,20 @@ This will migrate **only** `SUPPORT-123`.
 If the migration is interrupted (network failure, system sleep, etc.), the script automatically resumes from where it left off.
 
 **How it works**:
+
 - Progress is saved in `migration_state.json` after each batch
 - Contains: `start_at` (pagination offset) and `total_processed` (count)
 
 **To resume**:
 Simply run the script again:
+
 ```bash
 python migrate_support_tickets.py
 ```
 
 **To restart from beginning**:
 Delete the state file:
+
 ```bash
 rm migration_state.json
 python migrate_support_tickets.py
@@ -407,11 +431,13 @@ python migrate_support_tickets.py
 Logs are saved to `logs/migration_YYYYMMDD_HHMMSS.log`.
 
 **View log in real-time**:
+
 ```bash
 tail -f logs/migration_*.log
 ```
 
 **Search for errors**:
+
 ```bash
 grep ERROR logs/migration_*.log
 ```
@@ -429,6 +455,7 @@ grep ERROR logs/migration_*.log
 ### 6.2. Field Mapping
 
 **Jira → GLPI Mapping**:
+
 - **Status**: Jira status → GLPI status (1-6, 10)
 - **Type**: Jira issue type → GLPI ticket type (1=Incident, 2=Request)
 - **Priority**: Jira priority → GLPI Urgency + Impact (1-5 scale)
@@ -441,6 +468,7 @@ grep ERROR logs/migration_*.log
 - **Participants (Jira)** → **Observers (GLPI)**
 
 **Missing Users**: If a user is not found in GLPI:
+
 - Tracked in `missing_users.txt`
 - Ticket created with API user as fallback
 - Original name preserved in description
@@ -487,6 +515,7 @@ grep ERROR logs/migration_*.log
 **Problem**: `Failed to load configuration: Missing 'jira.pat' in config`
 
 **Solution**:
+
 1. Check `config.yaml` has `pat` field filled
 2. Or set environment variable: `export JIRA_PAT=your_token_here`
 3. Verify token is valid in Jira
@@ -496,6 +525,7 @@ grep ERROR logs/migration_*.log
 **Problem**: `GLPI session initialization failed: Authentication error`
 
 **Solution**:
+
 1. Check App-Token and User-Token in `config.yaml`
 2. Verify tokens are active in GLPI
 3. Try fallback Basic Auth: provide `username` and `password`
@@ -508,6 +538,7 @@ grep ERROR logs/migration_*.log
 **Problem**: `SSL verification failed` or `certificate verify failed`
 
 **Solution**:
+
 1. For Jira: Set `jira.verify_ssl: false` in `config.yaml`
 2. For GLPI: Provide certificate path: `glpi.verify_ssl: "glpi.pem"`
 3. Or disable: `glpi.verify_ssl: false` (not recommended for production)
@@ -519,6 +550,7 @@ grep ERROR logs/migration_*.log
 **Problem**: Many users not found in GLPI, tickets created with wrong requester
 
 **Solution**:
+
 1. Import all users from LDAP to GLPI first
 2. Check username consistency between Jira and GLPI
 3. Review `missing_users.txt` after migration
@@ -526,16 +558,15 @@ grep ERROR logs/migration_*.log
 5. Re-run migration (delete migrated tickets first or update them)
 
 **Check missing users**:
+
 ```bash
 cat missing_users.txt
 ```
 
 Format:
-```
 Login Name      Full Name
 john.doe        John Doe
 jane.smith      Jane Smith
-```
 
 ---
 
@@ -544,6 +575,7 @@ jane.smith      Jane Smith
 **Problem**: Attachments not uploaded or linked
 
 **Solution**:
+
 1. Check Jira permissions: API user must access attachments
 2. Verify GLPI upload limits: **Setup > General > Upload**
 3. Check network bandwidth: large files may timeout
@@ -556,6 +588,7 @@ jane.smith      Jane Smith
 **Problem**: Tickets created with wrong status or type
 
 **Solution**:
+
 1. Review `mappings.status` in `config.yaml`
 2. Check dynamic mapping in logs: `grep "Dynamic mapping" logs/migration_*.log`
 3. Add missing status mappings manually
@@ -568,6 +601,7 @@ jane.smith      Jane Smith
 **Problem**: Migration is very slow
 
 **Solution**:
+
 1. Reduce `batch_size` in `config.yaml` (try 10 or 20)
 2. Check network latency to Jira and GLPI servers
 3. Review GLPI server load and database performance
@@ -581,6 +615,7 @@ jane.smith      Jane Smith
 **Problem**: Location or Items not linked to tickets
 
 **Solution**:
+
 1. Verify classification values exist in Jira: `python list_classifications.py`
 2. Check mapping in `config.yaml` matches exactly (case-sensitive)
 3. Verify Location names exist in GLPI: **Setup > Dropdowns > Locations**
@@ -630,7 +665,7 @@ grep WARNING logs/migration_*.log
 
 ## 9. Limitations
 
-1. **GLPI generates new IDs**: Jira ticket keys (e.g., `ITSDESK-123`) are preserved in the description, but GLPI assigns new ticket IDs
+1. **GLPI generates new IDs**: Jira ticket keys (e.g., `SUPPORT-123`) are preserved in the description, but GLPI assigns new ticket IDs
 2. **Cannot create/sync users automatically**: Users must be imported manually or via LDAP before migration
 3. **Last Update field auto-updates**: GLPI updates this field automatically, so original Jira update date is only in description
 4. **Time to Own calculated by GLPI SLAs**: Cannot set historical values
@@ -646,7 +681,7 @@ grep WARNING logs/migration_*.log
 - [ ] Disable GLPI rules temporarily (to avoid auto-actions)
 - [ ] Disable GLPI authentication plugins (SSO, LDAP) if they interfere
 - [ ] Backup GLPI database
-- [ ] Test with debug mode first (`target_ticket_key: "ITSDESK-123"`)
+- [ ] Test with debug mode first (`target_ticket_key: "SUPPORT-123"`)
 - [ ] Run `list_classifications.py` to discover Jira classifications
 - [ ] Update `config.yaml` with correct classification mappings
 
@@ -673,6 +708,7 @@ grep WARNING logs/migration_*.log
 ### 11.1. Custom Log Formats
 
 Edit `common/config.yaml`:
+
 ```yaml
 logging:
   format: "%(asctime)s [%(levelname)-8s] %(name)-20s: %(message)s"
@@ -680,6 +716,7 @@ logging:
 ```
 
 **Log Levels**:
+
 - **DEBUG**: Detailed field extraction, mapping logic, API request/response
 - **INFO**: Ticket processing progress, batch status (default)
 - **WARNING**: Missing users, fallback mappings
@@ -689,11 +726,13 @@ logging:
 ### 11.2. Multiple Environment Setups
 
 Create separate common config files:
+
 - `common/config.dev.yaml` (Development)
 - `common/config.staging.yaml` (Staging)
 - `common/config.prod.yaml` (Production)
 
 Then create symbolic link or copy the desired config:
+
 ```bash
 cp common/config.prod.yaml common/config.yaml
 ```
@@ -701,6 +740,7 @@ cp common/config.prod.yaml common/config.yaml
 ### 11.3. Parallel Migrations (Multiple Projects)
 
 Not currently supported. Run sequentially with different folder configs:
+
 ```bash
 # Edit 03_support_jira_to_glpi_assistance_tickets_migration/config.yaml
 # Set project_key: "SUPPORT"

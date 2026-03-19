@@ -230,7 +230,7 @@ def process_changelog(issue, glpi, log_func=None):
     fields = issue.get('fields', {})
     created_date = fields.get('created')
     reporter_display = (fields.get('reporter') or {}).get('displayName', 'Unknown')
-    reporter_name = (fields.get('reporter') or {}).get('name')
+    reporter_name = (fields.get('reporter') or {}).get('emailAddress') or (fields.get('reporter') or {}).get('name')
 
     # Construct a history item for Creation
     creation_event = {
@@ -260,7 +260,7 @@ def process_changelog(issue, glpi, log_func=None):
     for history in all_events:
         created = history.get('created')
         author_display = (history.get('author') or {}).get('displayName', 'Unknown')
-        author_name = (history.get('author') or {}).get('name')
+        author_name = (history.get('author') or {}).get('emailAddress') or (history.get('author') or {}).get('name')
         items = history.get('items', [])
 
         # Parse date nicely matching Jira format: "19/Jun/14 3:40 PM"
@@ -275,13 +275,13 @@ def process_changelog(issue, glpi, log_func=None):
 
         uid = None
         if author_name:
-            uid = glpi.get_user_id_by_name(author_name)
+            uid = glpi.get_user_id_by_email(author_name)
             if not uid:
                 log_msg(f"       [DEBUG-HIST] User lookup failed for login '{author_name}' (Display: {author_display})", "debug")
 
         # Fallback to Display Name lookup if failed
         if not uid and author_display:
-            uid = glpi.get_user_id_by_name(author_display)
+            uid = glpi.get_user_id_by_email(author_display)
             if not uid:
                 log_msg(f"       [DEBUG-HIST] Fallback lookup also failed for display '{author_display}'", "debug")
 
@@ -528,12 +528,12 @@ def main():
 
                 # Assignee -> Tech
                 assignee_data = fields.get('assignee') or {}
-                assignee_name = assignee_data.get('name')  # Username used for mapping
+                assignee_name = assignee_data.get('emailAddress') or assignee_data.get('name')  # Username used for mapping
                 assignee_display = assignee_data.get('displayName', assignee_name)
 
                 assignee_id = None
                 if assignee_name:
-                    assignee_id = glpi.get_user_id_by_name(assignee_name)
+                    assignee_id = glpi.get_user_id_by_email(assignee_name)
                     if assignee_id:
                         log(f"    ✓ Mapped Assignee '{assignee_display}' to GLPI ID {assignee_id}")
                     else:
@@ -541,12 +541,12 @@ def main():
 
                 # Reporter -> Requester (for Task Team)
                 reporter_data = fields.get('reporter') or {}
-                reporter_name = reporter_data.get('name')  # Username used for mapping
+                reporter_name = reporter_data.get('emailAddress') or reporter_data.get('name')  # Username used for mapping
                 reporter_display = reporter_data.get('displayName', reporter_data.get('name'))
 
                 reporter_id = None
                 if reporter_name:
-                    reporter_id = glpi.get_user_id_by_name(reporter_name)
+                    reporter_id = glpi.get_user_id_by_email(reporter_name)
                     if reporter_id:
                         log(f"    ✓ Mapped Reporter '{reporter_display}' to GLPI ID {reporter_id}")
                     else:
@@ -690,7 +690,7 @@ def main():
                     if comments:
                         log(f"    - Migrating {len(comments)} comments as Notes...")
                         for comment in comments:
-                            author_login = (comment.get('author') or {}).get('name')
+                            author_login = (comment.get('author') or {}).get('emailAddress') or (comment.get('author') or {}).get('name')
                             body = comment.get('body', '')
                             created = comment.get('created')
                             display_name = (comment.get('author') or {}).get('displayName') or author_login
@@ -698,9 +698,9 @@ def main():
                             comment_author_id = None
                             if author_login:
                                 # Try to map by login first, then display name
-                                comment_author_id = glpi.get_user_id_by_name(author_login)
+                                comment_author_id = glpi.get_user_id_by_email(author_login)
                                 if not comment_author_id and display_name:
-                                    comment_author_id = glpi.get_user_id_by_name(display_name)
+                                    comment_author_id = glpi.get_user_id_by_email(display_name)
 
                             # Format Date: "19/Jun/14 3:40 PM UTC+7"
                             date_fmt = "%d/%b/%y %I:%M %p"

@@ -6,6 +6,50 @@ import os
 import sys
 import re
 
+
+def build_confluence_url(file_path, export_dir, base_url):
+    """
+    Build original Confluence URL from a local export file path.
+
+    Confluence export filename pattern: {TITLE}_{PAGE_ID}.html
+    Confluence export folder structure:  {export_dir}/{SPACE_KEY}/{filename}.html
+
+    URL built: {base_url}/spaces/{SPACE_KEY}/pages/{PAGE_ID}/{SLUG}
+    where SLUG = filename-without-suffix with dashes replaced by '+'
+
+    Args:
+        file_path (str): Absolute path to the local .html file.
+        export_dir (str): Root export directory (to derive the space key).
+        base_url (str): Confluence base URL, e.g. 'https://confluence.example.com'.
+                        If empty/None, URL construction is skipped.
+
+    Returns:
+        tuple: (page_id, url) where url is None if base_url is not provided,
+               or (None, None) if page_id cannot be extracted from the filename.
+    """
+    filename = os.path.basename(file_path)
+
+    # Extract page_id from trailing _<digits>.html
+    match = re.search(r'_(\d+)\.html$', filename)
+    if not match:
+        return None, None
+    page_id = match.group(1)
+
+    if not base_url:
+        return page_id, None
+
+    # Space key: first folder component under export_dir
+    rel_path = os.path.relpath(file_path, export_dir)
+    parts = rel_path.replace('\\', '/').split('/')
+    space_key = parts[0] if len(parts) > 1 else ''
+
+    # Slug: filename without _{page_id}.html suffix, dashes replaced by '+'
+    slug_raw = filename[:match.start()]
+    slug = slug_raw.replace('-', '+')
+
+    url = f"{base_url.rstrip('/')}/spaces/{space_key}/pages/{page_id}/{slug}"
+    return page_id, url
+
 # Import from shared library
 from common.clients.glpi_client import GlpiClient
 from common.config.loader import load_config
@@ -45,14 +89,20 @@ def main():
         else:
             print(message)
 
-    log("=== Confluence to GLPI Knowledge Base Migration ===\n")
-
     # Extract config values
     glpi_url = config.get('glpi', {}).get('url')
     app_token = config.get('glpi', {}).get('app_token')
     user_token = config.get('glpi', {}).get('user_token')
     verify_ssl = config.get('glpi', {}).get('verify_ssl', False)
     export_dir = config.get('confluence', {}).get('export_dir', config.get('EXPORT_DIR', ''))
+    confluence_base_url = config.get('confluence', {}).get('base_url', '')
+    debug_mode = config.get('migration', {}).get('debug', False)
+    batch_size = config.get('migration', {}).get('batch_size', 50)
+
+    log("=== Confluence to GLPI Knowledge Base Migration ===")
+    if debug_mode:
+        log(f"[DEBUG MODE] Will stop after 1 batch (batch_size={batch_size})")
+    log("")
 
     # Validation
     if not glpi_url or not app_token:
@@ -154,11 +204,17 @@ def main():
                     if parser.metadata_html:
                         content = parser.metadata_html + "<hr>" + content
 
-                    # Add Confluence ID reference
-                    match = re.search(r'_(\d+)\.html$', filename)
-                    confluence_id = match.group(1) if match else None
-                    if confluence_id:
-                        content += f"<br><hr><p style='color: #888; font-size: 0.8em;'>Reference: Confluence Page ID {confluence_id}</p>"
+                    # Add Confluence source link
+                    page_id, confluence_url = build_confluence_url(file_path, export_dir, confluence_base_url)
+                    if confluence_url:
+                        content += (
+                            f"<br><hr>"
+                            f"<p style='color: #888; font-size: 0.8em;'>"
+                            f"Source: <a href='{confluence_url}' target='_blank'>View on Confluence</a>"
+                            f" (Page ID {page_id})</p>"
+                        )
+                    elif page_id:
+                        content += f"<br><hr><p style='color: #888; font-size: 0.8em;'>Reference: Confluence Page ID {page_id}</p>"
 
                     # Resolve category path from breadcrumbs
                     category_id = 0
@@ -179,9 +235,10 @@ def main():
                         log("  ✗ Failed to create KB item.\n", "error")
                         error_count += 1
 
-                    # DEBUG: Stop after 1 file (uncomment to test)
-                    # log("\n[DEBUG] Stopping after 1 file.", "debug")
-                    # return
+                    # Debug mode: stop after batch_size files
+                    if debug_mode and processed_count >= batch_size:
+                        log(f"\n[DEBUG] debug=true → Processed {processed_count} files (batch_size={batch_size}). Stopping.", "debug")
+                        return
 
                 except Exception as e:
                     log(f"  Error processing content: {e}\n", "error")

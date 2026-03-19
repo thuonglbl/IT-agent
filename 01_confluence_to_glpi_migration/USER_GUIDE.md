@@ -247,11 +247,11 @@ Generated: 2026-03-03
 Total pages: 202 | Last editors: 28
 ================================================================
 
-## Pierre GUIOL (12 pages)
+## Pierre G. (12 pages)
   # | Page Title                                    | Breadcrumbs                              | Created By                | Last Updated
 ----+-------------------------------------------------+------------------------------------------+---------------------------+--------------
   1 | API manager                                    | Home > User Knowledge Base               | John Smith                | Mar 12, 2025
-  2 | Print and Scan                                 | Home > User Knowledge Base               | Bobert Johnson            | Feb 12, 2025
+  2 | Print and Scan                                 | Home > User Knowledge Base               | Robert Johnson            | Feb 12, 2025
 ...
 
 SUMMARY

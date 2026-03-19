@@ -1,32 +1,45 @@
 import requests
-import config
 import re
-from glpi_api import GlpiClient
 
-jls_extract_var = config.DEFAULT_CATEGORY_TO_CLEANUP
-def cleanup_category(category_name=jls_extract_var):
+# Import from shared library
+from common.config.loader import load_config
+from common.clients.glpi_client import GlpiClient
+
+def cleanup_category():
+    # 1. Load config from YAML
+    cfg = load_config(validate=False)
+    
+    # 2. Extract data from Dictionary
+    # Map with config.yaml
+    category_name = cfg.get('cleanup', {}).get('default_category')
+    
+    # Map with common/config.yaml
+    glpi_url = cfg.get('glpi', {}).get('url')
+    app_token = cfg.get('glpi', {}).get('app_token')
+    user_token = cfg.get('glpi', {}).get('user_token')
+    verify_ssl = cfg.get('glpi', {}).get('verify_ssl', False)
 
     print(f"--- Cleanup Script: Deleting items in '{category_name}' ---")
 
-    # Init Client
+    if not category_name:
+         print("Error: Category name is empty. Check your config.yaml file.")
+         return
+
+    # 3. Init Client with new variables
     client = GlpiClient(
-        url=config.GLPI_URL, 
-        app_token=config.APP_TOKEN, 
-        user_token=config.USER_TOKEN,
-        verify_ssl=config.VERIFY_SSL
+        url=glpi_url, 
+        app_token=app_token, 
+        user_token=user_token,
+        verify_ssl=verify_ssl
     )
 
     try:
         client.init_session()
 
-        # 1. Get Root Category ID
-        # find named category, delete everything inside.
-        
-        if not category_name:
-             print("Error: Category name is empty. Accessing Root (0) directly is risky without explicit confirmation.")
-             return
+        # Switch to Root entity (ID=0) with recursive=True so all KB categories are visible
+        client.change_active_entity(0, is_recursive=True)
 
-        root_id = client.get_category_id(category_name)
+        root_id = client.get_kb_category_id(category_name)
 
         if not root_id:
             print(f"Category '{category_name}' not found.")
@@ -44,21 +57,20 @@ def cleanup_category(category_name=jls_extract_var):
             print(f"\nProcessing Category: {cat_name} ({cat_id})")
             
             # 1. Post-Order: Process Children First
-            # Find sub-categories
             endpoint = f"{client.url}/KnowbaseItemCategory"
             params = {
                 "is_deleted": 0,
-                "range": "0-100",
-                "criteria[0][field]": "knowbaseitemcategories_id",
-                "criteria[0][searchtype]": "equals",
-                "criteria[0][value]": cat_id
+                "range": "0-1000",
+                "is_recursive": 1
             }
             try:
                 resp = requests.get(endpoint, headers=client.headers, params=params, verify=client.verify_ssl)
                 resp.raise_for_status()
                 data = resp.json()
                 if isinstance(data, list):
-                    for child in data:
+                    # Filter children by parent = cat_id
+                    children = [c for c in data if int(c.get('knowbaseitemcategories_id', 0)) == int(cat_id)]
+                    for child in children:
                         cleanup_recursive(child.get('id'), child.get('name'))
             except Exception as e:
                 print(f"  Error scanning children of {cat_id}: {e}")
@@ -70,7 +82,6 @@ def cleanup_category(category_name=jls_extract_var):
                 for item in items:
                     item_id = item.get('id')
                     
-                    # Delete linked docs
                     full_item = client.get_item('KnowbaseItem', item_id)
                     if full_item:
                          content = full_item.get('answer', '')
@@ -82,7 +93,7 @@ def cleanup_category(category_name=jls_extract_var):
             
             # 3. Delete the Category Itself
             if cat_id != root_id:
-                 client.delete_category(cat_id)
+                 client.delete_kb_category(cat_id)
 
         print("Starting Recursive Cleanup (Post-Order)...")
         cleanup_recursive(root_id, category_name)

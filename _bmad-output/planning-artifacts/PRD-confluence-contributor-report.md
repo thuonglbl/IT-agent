@@ -35,15 +35,15 @@ The script parses **Confluence HTML export files** (same source as folder 01 mig
 
 **Pattern 1** — Different creator and last editor:
 ```html
-Created by <span class='author'> Cuong DOAN PHI</span>, last updated by <span class='editor'> Pierre GUIOL</span> on Mar 12, 2025
+Created by <span class='author'> Cuong D.</span>, last updated by <span class='editor'> Pierre G.</span> on Mar 12, 2025
 ```
-→ Created By: `Cuong DOAN PHI` | Last Updated By: `Pierre GUIOL`
+→ Created By: `Cuong D.` | Last Updated By: `Pierre G.`
 
 **Pattern 2** — Same person created and last updated (no editor span):
 ```html
-Created by <span class='author'> Jose Luis ORTEGA MARTIN</span>, last updated on Apr 11, 2025
+Created by <span class='author'> Jose O.</span>, last updated on Apr 11, 2025
 ```
-→ Created By: `Jose Luis ORTEGA MARTIN` | Last Updated By: `Jose Luis ORTEGA MARTIN`
+→ Created By: `Jose O.` | Last Updated By: `Jose O.`
 
 **Pattern 3** — Empty metadata (no author/date info):
 ```html
@@ -71,19 +71,19 @@ Generated: 2026-03-03
 Total pages: 202 | Last editors: 15
 ============================================================
 
-## Pierre GUIOL (12 pages)
+## Pierre G. (12 pages)
 | # | Page Title                          | Breadcrumbs                                  | Created By         | Last Updated |
 |---|-------------------------------------|----------------------------------------------|--------------------|--------------|
-| 1 | API manager - Bruno & Postman       | Home > User Knowledge Base                   | Cuong DOAN PHI     | Mar 12, 2025 |
-| 2 | Print and Scan                      | Home > User Knowledge Base                   | Michele POTALIVO   | Feb 12, 2025 |
-| 3 | ELCA Wi-Fi Configuration            | Home > User Knowledge Base > Network         | Minh NGUYEN LE HOANG | Apr 01, 2025 |
+| 1 | API manager - Bruno & Postman       | Home > User Knowledge Base                   | Cuong D.           | Mar 12, 2025 |
+| 2 | Print and Scan                      | Home > User Knowledge Base                   | Michele P.         | Feb 12, 2025 |
+| 3 | Internal Wi-Fi Configuration        | Home > User Knowledge Base > Network         | Minh N.            | Apr 01, 2025 |
 ...
 
-## Jose Luis ORTEGA MARTIN (6 pages)
+## Jose O. (6 pages)
 | # | Page Title                          | Breadcrumbs                                  | Created By                  | Last Updated |
 |---|-------------------------------------|----------------------------------------------|-----------------------------|--------------|
-| 1 | Set up Outlook app for IOS          | Home > User KB > Outlook > IOS               | Jose Luis ORTEGA MARTIN     | Apr 11, 2025 |
-| 2 | Enroll Badge for Printers           | Home > User Knowledge Base                   | Jose Luis ORTEGA MARTIN     | Mar 26, 2025 |
+| 1 | Set up Outlook app for IOS          | Home > User KB > Outlook > IOS               | Jose O.                     | Apr 11, 2025 |
+| 2 | Enroll Badge for Printers           | Home > User Knowledge Base                   | Jose O.                     | Mar 26, 2025 |
 ...
 
 ## Unknown (5 pages)
@@ -99,16 +99,16 @@ File: `confluence_contributors.csv` — one row per page.
 
 | last_updated_by | page_title | breadcrumbs | created_by | last_updated | confluence_id | filename |
 |-----------------|-----------|-------------|------------|--------------|---------------|----------|
-| Pierre GUIOL | API manager - Bruno & Postman | Home > User Knowledge Base | Cuong DOAN PHI | Mar 12, 2025 | 1315046768 | 1315046768.html |
-| Jose Luis ORTEGA MARTIN | Set up Outlook app for IOS | Home > User KB > Outlook > IOS | Jose Luis ORTEGA MARTIN | Apr 11, 2025 | 1317137011 | Set-up-Outlook-app-for-IOS_1317137011.html |
+| Pierre G. | API manager - Bruno & Postman | Home > User Knowledge Base | Cuong D. | Mar 12, 2025 | 1000000001 | 1000000001.html |
+| Jose O. | Set up Outlook app for IOS | Home > User KB > Outlook > IOS | Jose O. | Apr 11, 2025 | 1000000002 | Set-up-Outlook-app-for-IOS_1000000002.html |
 
 ### 3.3 Summary Statistics
 
 ```
 TOP LAST EDITORS (by page count):
-  1. Pierre GUIOL              - 12 pages
-  2. Siegfried DE ROECK         - 8 pages
-  3. Jose Luis ORTEGA MARTIN   - 6 pages
+  1. Pierre G.                 - 12 pages
+  2. Siegfried R.              - 8 pages
+  3. Jose O.                   - 6 pages
   ...
 
 PAGES WITHOUT METADATA: 5
@@ -198,8 +198,8 @@ Confluence HTML Export Dir
         ▼
   Group by last_updated_by → dict
   {
-    "Pierre GUIOL": [page1, page2, ...],
-    "Jose Luis ORTEGA MARTIN": [page3, ...],
+  "Pierre G.": [page1, page2, ...],
+  "Jose O.": [page3, ...],
   }
         │
         ▼
