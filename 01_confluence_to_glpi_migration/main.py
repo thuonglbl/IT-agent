@@ -6,6 +6,9 @@ import os
 import sys
 import re
 
+# Add root directory to sys.path to resolve 'common' module
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 def build_confluence_url(file_path, export_dir, base_url):
     """

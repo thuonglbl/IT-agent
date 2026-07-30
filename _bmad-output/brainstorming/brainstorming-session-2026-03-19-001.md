@@ -24,6 +24,7 @@ document_language: English
 **Topic:** RAG/AI Architecture for Milestone 4 of the IT Agent System
 
 **Goals:**
+
 - Explore technical architecture options (RAG pipeline, vLLM integration, LangGraph orchestration)
 - Design auto-index update mechanism (triggered by GLPI KB changes)
 - Design HITL feedback loop
@@ -34,6 +35,7 @@ document_language: English
 ### Context Guidance
 
 From README.md — The system must:
+
 1. Trigger when an IT ticket is created/updated in GLPI
 2. Read ticket content → Search GLPI Knowledge Base via RAG
 3. Post automated answer if confidence is high
@@ -50,4 +52,3 @@ _Brainstorming session initialized. Scope confirmed by user._
 ## Ideas & Exploration
 
 _Content will be appended as brainstorming progresses._
-

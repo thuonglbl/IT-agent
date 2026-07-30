@@ -167,8 +167,9 @@ Before running the main migration, ensure your configuration is correct:
 2.  If successful, you should see a session token or a 200 OK response.
 
 ### Run Migration
-Run the following command:
+Run the following commands from the project root:
 ```bash
+cd 01_confluence_to_glpi_migration
 python main.py
 ```
 
@@ -251,7 +252,7 @@ Total pages: 202 | Last editors: 28
   # | Page Title                                    | Breadcrumbs                              | Created By                | Last Updated
 ----+-------------------------------------------------+------------------------------------------+---------------------------+--------------
   1 | API manager                                    | Home > User Knowledge Base               | John Smith                | Mar 12, 2025
-  2 | Print and Scan                                 | Home > User Knowledge Base               | Robert Johnson            | Feb 12, 2025
+  2 | Print and Scan                                 | Home > User Knowledge Base               | Bobert Johnson            | Feb 12, 2025
 ...
 
 SUMMARY

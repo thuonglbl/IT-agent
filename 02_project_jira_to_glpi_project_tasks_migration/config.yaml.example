@@ -117,6 +117,19 @@ glpi:
   # Target project name in GLPI (must match exactly or be found via search)
   project_name: "My GLPI Project Name"
 
+  # Routing mode: "single" (all tickets to one project) or "split_by_status" (route by ticket status)
+  # Default: "single" (backward compatible)
+  routing_mode: "single"
+
+  # Archived project name in GLPI (required when routing_mode is "split_by_status")
+  # archived_project_name: "My Archived Project"
+
+  # Jira statuses that route tickets to the archived project (case-insensitive)
+  # archived_statuses:
+  #   - closed
+  #   - resolved
+  #   - completed
+
 # Migration Settings (Project-Specific)
 migration:
   # State file to track migration progress

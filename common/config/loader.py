@@ -163,6 +163,16 @@ class ConfigLoader:
             if os.path.exists(candidate):
                 print(f"Auto-detected config: {candidate}")
                 return candidate
+                
+        # Fallback: Check in the directory of the executed script
+        if sys.argv and sys.argv[0]:
+            script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+            if script_dir and script_dir != os.path.abspath(os.getcwd()):
+                for candidate in candidates:
+                    candidate_path = os.path.join(script_dir, candidate)
+                    if os.path.exists(candidate_path):
+                        print(f"Auto-detected config: {candidate_path}")
+                        return candidate_path
 
         raise FileNotFoundError(
             f"Configuration file not found. Tried: {', '.join(candidates)}\n"

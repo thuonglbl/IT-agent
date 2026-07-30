@@ -189,9 +189,19 @@ python jira_to_glpi.py
 
 ## 4. Running the Migration
 
-Run the following command:
+### 4.1. Run the Main Migration
+Run the following commands from the project root:
 ```bash
+cd 02_project_jira_to_glpi_project_tasks_migration
 python jira_to_glpi.py
+```
+
+### 4.2. Update Jira Links (Post-Migration)
+After the main migration is fully completed, you can run a script to replace all plain text Jira keys and Jira URLs with direct links to the new GLPI Project Tasks.
+
+Run the following command from the project root:
+```bash
+python common/scripts/update_jira_links.py --module 02
 ```
 
 ## 5. Features & Behavior

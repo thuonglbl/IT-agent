@@ -4,6 +4,8 @@ Consolidates functionality from all 3 migration folders
 Supports: Knowledge Base, Tickets, Projects, Documents, Caching
 """
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import json
 import os
 import re
@@ -1092,7 +1094,7 @@ class GlpiClient:
         params = {
             "is_deleted": 0,
             "searchText": name,
-            "range": "0-10"
+            "range": "0-1000"
         }
         try:
             response = requests.get(endpoint, headers=self.headers, params=params, verify=self.verify_ssl)
@@ -1356,13 +1358,14 @@ class GlpiClient:
         finally:
             files['filename[0]'][1].close()
 
-    def link_document_to_ticket(self, ticket_id, doc_id):
+    def link_document_to_item(self, items_id, doc_id, itemtype="Ticket"):
         """
-        Link an uploaded Document to a Ticket.
+        Link an uploaded Document to an Item (Ticket, ProjectTask, etc).
 
         Args:
-            ticket_id: Ticket ID
+            items_id: Item ID
             doc_id: Document ID
+            itemtype: GLPI itemtype (default: 'Ticket')
 
         Returns:
             bool: True if successful
@@ -1371,16 +1374,20 @@ class GlpiClient:
         payload = {
             "input": {
                 "documents_id": doc_id,
-                "itemtype": "Ticket",
-                "items_id": ticket_id
+                "itemtype": itemtype,
+                "items_id": items_id
             }
         }
         try:
             requests.post(endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
             return True
         except Exception as e:
-            print(f"Failed to link doc {doc_id} to ticket {ticket_id}: {e}")
+            print(f"Failed to link doc {doc_id} to {itemtype} {items_id}: {e}")
             return False
+
+    def link_document_to_ticket(self, ticket_id, doc_id):
+        """Backward compatibility for Tickets."""
+        return self.link_document_to_item(ticket_id, doc_id, itemtype="Ticket")
 
     def delete_document(self, doc_id):
         """
@@ -1426,7 +1433,7 @@ class GlpiClient:
         endpoint = f"{self.url}/search/{item_type}"
         params = {
             "criteria[0][field]": "1",  # Name
-            "criteria[0][searchtype]": "equals",
+            "criteria[0][searchtype]": "contains",
             "criteria[0][value]": item_name,
             "forcedisplay[0]": "1",     # Name
             "forcedisplay[1]": "2",     # ID
@@ -1451,6 +1458,40 @@ class GlpiClient:
         except Exception:
             return None
 
+    def create_item(self, item_type, payload):
+        """
+        Create a generic item in GLPI (e.g., Computer, Monitor).
+        """
+        endpoint = f"{self.url}/{item_type}"
+        data = {"input": payload}
+        try:
+            response = requests.post(endpoint, headers=self.headers, json=data, verify=self.verify_ssl)
+            if not response.ok:
+                print(f"Failed to create {item_type}: {response.status_code}")
+                print(response.text)
+            response.raise_for_status()
+            result = response.json()
+            print(f"Created {item_type} ID: {result.get('id')}")
+            return result.get('id')
+        except Exception as e:
+            print(f"Error creating {item_type}: {e}")
+            return None
+
+    def update_item(self, item_type, item_id, payload):
+        """
+        Update a generic item in GLPI.
+        """
+        endpoint = f"{self.url}/{item_type}/{item_id}"
+        data = {"input": payload}
+        try:
+            response = requests.put(endpoint, headers=self.headers, json=data, verify=self.verify_ssl)
+            response.raise_for_status()
+            print(f"Updated {item_type} ID: {item_id}")
+            return True
+        except Exception as e:
+            print(f"Error updating {item_type} ID {item_id}: {e}")
+            return False
+
     def get_item(self, item_type, item_id):
         """
         Get a specific item by ID.
@@ -1470,6 +1511,28 @@ class GlpiClient:
         except Exception as e:
             print(f"Failed to get {item_type} {item_id}: {e}")
             return None
+
+    def get_subitems(self, item_type, item_id, subitem_type):
+        """
+        Get all subitems of a specific type for a given item.
+        Example: get_subitems("Ticket", 123, "ITILFollowup")
+        """
+        endpoint = f"{self.url}/{item_type}/{item_id}/{subitem_type}"
+        try:
+            # expand_dropdowns=true is often useful
+            url = f"{endpoint}?expand_dropdowns=true"
+            response = requests.get(url, headers=self.headers, verify=self.verify_ssl)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                return []
+            print(f"Failed to get {subitem_type} for {item_type} {item_id}: {e}")
+            return []
+        except Exception as e:
+            print(f"Failed to get {subitem_type} for {item_type} {item_id}: {e}")
+            return []
+
 
     # ===== Utilities =====
 

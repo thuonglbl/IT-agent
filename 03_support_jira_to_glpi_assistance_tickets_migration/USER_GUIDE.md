@@ -210,13 +210,13 @@ jira:
 migration:
   state_file: "migration_state.json"   # Progress tracker
   missing_users_file: "missing_users.txt"
-  jira_debug_ticket_key: null          # Optional: Target specific ticket (e.g., "SUPPORT-123")
+  debug_ticket: null                   # Optional: Target specific ticket (e.g., "SUPPORT-123")
 ```
 
 **Debug Modes**:
 
 1. **Process One Batch**: Set `migration.debug: true` in `common/config.yaml` to process only 1 batch (50 tickets)
-2. **Target Specific Ticket**: Set `jira_debug_ticket_key: "SUPPORT-123"` in this config to migrate only that ticket
+2. **Target Specific Ticket**: Set `debug_ticket: "SUPPORT-123"` in this config to migrate only that ticket
 
 #### 3.2.3. Field Mappings
 
@@ -313,6 +313,7 @@ You can override sensitive credentials using environment variables instead of ed
 **Windows (CMD)**:
 
 ```cmd
+cd 03_support_jira_to_glpi_assistance_tickets_migration
 set JIRA_PAT=your_token_here
 set GLPI_USER_TOKEN=your_token_here
 python migrate_support_tickets.py
@@ -321,6 +322,7 @@ python migrate_support_tickets.py
 **Windows (PowerShell)**:
 
 ```powershell
+cd 03_support_jira_to_glpi_assistance_tickets_migration
 $env:JIRA_PAT="your_token_here"
 $env:GLPI_USER_TOKEN="your_token_here"
 python migrate_support_tickets.py
@@ -391,7 +393,7 @@ Edit `03_support_jira_to_glpi_assistance_tickets_migration/config.yaml`:
 
 ```yaml
 migration:
-  jira_debug_ticket_key: "SUPPORT-123"
+  debug_ticket: "SUPPORT-123"
 ```
 
 Run migration:
@@ -426,7 +428,20 @@ rm migration_state.json
 python migrate_support_tickets.py
 ```
 
-### 5.4. Check Log Files
+### 5.4. Update Jira Links (Post-Migration)
+
+After the main migration is fully completed, you can run a script to replace all plain text Jira keys and Jira URLs with direct links to the new GLPI Assistance Tickets.
+
+Run the following command from the project root:
+
+```bash
+python common/scripts/update_jira_links.py --module 03
+```
+
+**Debug Mode for Link Updater:**
+You can also run the link updater for a specific ticket by enabling debug mode in `common/config.yaml` and specifying the `debug_ticket`.
+
+### 5.5. Check Log Files
 
 Logs are saved to `logs/migration_YYYYMMDD_HHMMSS.log`.
 
@@ -681,7 +696,7 @@ grep WARNING logs/migration_*.log
 - [ ] Disable GLPI rules temporarily (to avoid auto-actions)
 - [ ] Disable GLPI authentication plugins (SSO, LDAP) if they interfere
 - [ ] Backup GLPI database
-- [ ] Test with debug mode first (`target_ticket_key: "SUPPORT-123"`)
+- [ ] Test with debug mode first (`debug_ticket: "SUPPORT-123"`)
 - [ ] Run `list_classifications.py` to discover Jira classifications
 - [ ] Update `config.yaml` with correct classification mappings
 

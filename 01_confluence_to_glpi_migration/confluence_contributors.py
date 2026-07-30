@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup
 
 from common.config.loader import load_config
 from parser import ConfluenceParser
+from main import build_confluence_url
 
 # Regex: extract date after "on" in metadata text
 DATE_REGEX = re.compile(r'on\s+(\w+\s+\d{1,2},\s+\d{4})')
@@ -64,7 +65,7 @@ def extract_page_id(filename):
     return match.group(1) if match else ''
 
 
-def scan_pages(export_dir):
+def scan_pages(export_dir, base_url=''):
     """Walk export dir, parse each HTML file, return list of page dicts."""
     pages = []
     for root, _, files in os.walk(export_dir):
@@ -90,8 +91,12 @@ def scan_pages(export_dir):
             # Extract structured metadata
             created_by, last_updated_by, last_updated = extract_metadata(file_path)
 
+            # Build Confluence URL
+            _, confluence_url = build_confluence_url(file_path, export_dir, base_url)
+
             pages.append({
                 'title': title,
+                'confluence_url': confluence_url or '',
                 'breadcrumbs': breadcrumb_str,
                 'created_by': created_by,
                 'last_updated_by': last_updated_by,
@@ -137,17 +142,22 @@ def print_report(groups, total_pages, stale_months):
     print("=" * 80)
 
     for editor, pages in groups.items():
+        # Calculate URL column width based on longest URL in this group
+        url_width = max(len(page['confluence_url']) for page in pages) if pages else 14
+        url_width = max(url_width, 14)  # minimum width = len('Confluence URL')
+
         print(f"\n## {editor} ({len(pages)} pages)")
-        print(f"{'#':>3} | {'Page Title':<45} | {'Breadcrumbs':<40} | {'Created By':<25} | {'Last Updated':<12}")
-        print(f"{'---':>3}-+-{'-'*45}-+-{'-'*40}-+-{'-'*25}-+-{'-'*12}")
+        print(f"{'#':>3} | {'Page Title':<45} | {'Confluence URL':<{url_width}} | {'Breadcrumbs':<40} | {'Created By':<25} | {'Last Updated':<12}")
+        print(f"{'---':>3}-+-{'-'*45}-+-{'-'*url_width}-+-{'-'*40}-+-{'-'*25}-+-{'-'*12}")
 
         for i, page in enumerate(pages, 1):
             title = page['title'][:45]
+            url = page['confluence_url']
             bc = page['breadcrumbs'][:40]
             cb = page['created_by'][:25]
             lu = page['last_updated_str']
 
-            print(f"{i:>3} | {title:<45} | {bc:<40} | {cb:<25} | {lu:<12}")
+            print(f"{i:>3} | {title:<45} | {url:<{url_width}} | {bc:<40} | {cb:<25} | {lu:<12}")
 
             if page['last_updated'] and page['last_updated'] < stale_cutoff:
                 stale_count += 1
@@ -170,7 +180,7 @@ def print_report(groups, total_pages, stale_months):
 
 def export_csv(pages, output_path):
     """Export flat CSV file, one row per page."""
-    fieldnames = ['last_updated_by', 'page_title', 'breadcrumbs', 'created_by',
+    fieldnames = ['last_updated_by', 'page_title', 'confluence_url', 'breadcrumbs', 'created_by',
                   'last_updated', 'confluence_id', 'filename']
 
     with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
@@ -180,6 +190,7 @@ def export_csv(pages, output_path):
             writer.writerow({
                 'last_updated_by': page['last_updated_by'],
                 'page_title': page['title'],
+                'confluence_url': page['confluence_url'],
                 'breadcrumbs': page['breadcrumbs'],
                 'created_by': page['created_by'],
                 'last_updated': page['last_updated_str'],
@@ -196,18 +207,23 @@ def main():
                             help='Months threshold for stale content (default: 6)')
     arg_parser.add_argument('--export-dir', type=str, default=None,
                             help='Path to Confluence HTML export directory')
+    arg_parser.add_argument('--base-url', type=str, default=None,
+                            help='Confluence base URL (e.g. https://confluence.example.com)')
     args = arg_parser.parse_args()
 
-    # Resolve export dir: CLI arg > config file
-    export_dir = args.export_dir
-    if not export_dir:
-        try:
-            config = load_config(validate=False)
-            export_dir = config.get('confluence', {}).get('export_dir', '')
-        except Exception as e:
+    # Load config for values not provided via CLI
+    config = {}
+    try:
+        config = load_config(validate=False)
+    except Exception as e:
+        if not args.export_dir:
             print(f"Warning: Could not load config.yaml: {e}")
             print("Use --export-dir to specify the Confluence export directory.")
             return
+
+    # Resolve: CLI arg > config file
+    export_dir = args.export_dir or config.get('confluence', {}).get('export_dir', '')
+    confluence_base_url = args.base_url or config.get('confluence', {}).get('base_url', '')
 
     if not export_dir or not os.path.exists(export_dir):
         print(f"Error: Export directory not found: {export_dir}")
@@ -217,7 +233,7 @@ def main():
     print(f"Scanning: {export_dir}\n")
 
     # Scan and parse
-    pages = scan_pages(export_dir)
+    pages = scan_pages(export_dir, confluence_base_url)
     if not pages:
         print("No HTML files found.")
         return

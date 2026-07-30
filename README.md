@@ -30,8 +30,8 @@ graph LR
 
     subgraph "Step 1 & 2: Trigger"
         direction TB
-        A(New ticket<br>Status: SUBMITTED<br>Assignee: admin-helpdesk)
-        B["<b>Step 1</b><br>Status: ASSIGNED<br>Assignee: bot-helpdesk"]
+        A(New ticket<br>Status: SUBMITTED<br>Assignee: admin-itsdesk)
+        B["<b>Step 1</b><br>Status: ASSIGNED<br>Assignee: bot-itsdesk"]
         C["<b>Step 2</b><br>Read Ticket & Call RAG"]
         D{RAG finds info?}
     end
@@ -49,8 +49,8 @@ graph LR
         M["Post Public Answer<br><i>(Loops back to ON HOLD)</i>"]
         
         subgraph "Handoff to Human"
-            F["Post Private Comment<br>'Cannot find info'<br>Assignee: admin-helpdesk"]
-            O["Post Private Comment<br>'Escalating'<br>Assignee: admin-helpdesk"]
+            F["Post Private Comment<br>'Cannot find info'<br>Assignee: admin-itsdesk"]
+            O["Post Private Comment<br>'Escalating'<br>Assignee: admin-itsdesk"]
             P["Human IT Agent handles ticket"]
         end
     end
@@ -95,7 +95,8 @@ IT-agent/
 │
 ├── 01_confluence_to_glpi_migration/           # Migration 1: Knowledge Base
 ├── 02_project_jira_to_glpi_project_tasks_migration/  # Migration 2: Project tickets
-└── 03_support_jira_to_glpi_assistance_tickets_migration/  # Migration 3: Assistance tickets
+├── 03_support_jira_to_glpi_assistance_tickets_migration/  # Migration 3: Assistance tickets
+└── 04_itsops_to_glpi_assests_migration/       # Migration 4: ITSOPS Assets to GLPI Assets
 ```
 
 **Note:** Migrations are numbered for organisation. Each migration is independent and can be run in any order based on your needs.
@@ -114,7 +115,11 @@ IT-agent/
     * See [User Guide](03_support_jira_to_glpi_assistance_tickets_migration/USER_GUIDE.md)
     * *Status: Done*
 
-4. **RAG & Agent Orchestration**
+4. **Data Migration (from ITSOPS Inventory to GLPI > Assets)**
+    * See [User Guide](04_itsops_to_glpi_assests_migration/USER_GUIDE.md)
+    * *Status: In progress*
+
+5. **RAG & Agent Orchestration**
     * Implement Retrieval-Augmented Generation (RAG) on GLPI knowledge base and multi-agent systems on GLPI assitance tickets.
     * Build agent orchestration connected to an AI server running **vLLM** via API.
     * **Auto-Update Index**: Automatically update the index when the Knowledge Base changes.
@@ -122,7 +127,7 @@ IT-agent/
     * **Human Feedback**: Enable HITL (Human-in-the-loop) to improve agent performance.
     * *Status: Not Started*
 
-5. **CMS**
+6. **CMS**
     * **Admin dashboard**: A website for admin to manage agents, RAG and HITL in step 4.
     * *Status: Not Started*
 
@@ -167,9 +172,22 @@ Before running the import, ensure your GLPI LDAP directory is properly configure
 cd 01_confluence_to_glpi_migration  # OR
 cd 02_project_jira_to_glpi_project_tasks_migration  # OR
 cd 03_support_jira_to_glpi_assistance_tickets_migration
+cd 04_itsops_to_glpi_assests_migration
 
 # Run the migration
-python main.py  # (or migrate_support_tickets.py for folder 03, jira_to_glpi.py for folder 02)
+python main.py  # (or migrate_support_tickets.py for folder 03, jira_to_glpi.py for folder 02, main.py for folder 04)
+```
+
+### 4. Run Post-Migration Scripts (Optional)
+
+If you migrated Jira tickets (folders 02 and 03), you can run a post-migration tool to automatically replace plain text Jira keys and Jira URLs with links directly to GLPI:
+
+```bash
+# To update links for Folder 03 (Assistance Tickets)
+python common/scripts/update_jira_links.py --module 03
+
+# To update links for Folder 02 (Project Tasks)
+python common/scripts/update_jira_links.py --module 02
 ```
 
 ## Configuration System
@@ -178,9 +196,9 @@ python main.py  # (or migrate_support_tickets.py for folder 03, jira_to_glpi.py 
 
 **Common Config** (`common/config.yaml`) - Shared settings:
 
-* GLPI credentials (URL, tokens, username, password)
+* GLPI credentials (URL, username, password, App-Token) - *Note: If `user_token` fails with 401 Unauthorized, use Basic Auth by leaving `user_token` empty and filling in `username` and `password`.*
 * Jira credentials (URL, PAT)
-* Migration defaults (batch_size, debug mode)
+* Migration defaults (batch_size, debug mode, debug_ticket)
 * Logging configuration
 
 **Folder-Specific Config** - Project-specific settings:
@@ -235,5 +253,5 @@ For questions or issues:
 
 ---
 
-**Version:** 3.0 (with Agentic RAG)
-**Last Updated:** 2026-03-19
+**Version:** 4.1 (with Jira link updater)
+**Last Updated:** 2026-07-21

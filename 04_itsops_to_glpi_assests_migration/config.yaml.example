@@ -1,0 +1,11 @@
+# ITSOPS to GLPI Assets Migration Configuration
+
+# Database Configuration (ITSOPS)
+database:
+  server: "server-name"
+  database: "database-name"
+  shared_erp_database: "shared-erp-database-name"
+  username: ""  # Leave empty to use Windows Authentication
+  password: ""
+  driver: "{ODBC Driver 17 for SQL Server}"
+

@@ -4,6 +4,8 @@ Consolidates functionality from folders 02 and 03
 Supports: Issue search, Attachments, Project metadata, Security levels
 """
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class JiraClient:

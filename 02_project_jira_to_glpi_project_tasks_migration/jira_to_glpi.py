@@ -3,10 +3,14 @@ Jira to GLPI Project Tasks Migration
 Migrates Jira project issues to GLPI Project Tasks with full metadata and attachments
 """
 import os
+import sys
 import json
 import time
 import datetime
 import re
+
+# Add root directory to sys.path to resolve 'common' module
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import from shared library
 from common.clients.jira_client import JiraClient
@@ -18,8 +22,12 @@ from common.utils.state_manager import StateManager
 config = load_config(validate=False)  # Skip validation for legacy Python config
 
 # --- Constants ---
-STATE_FILE = config.get('migration', {}).get('state_file', config.get('STATE_FILE', 'migration_state.json'))
-MAPPING_FILE = config.get('migration', {}).get('mapping_file', config.get('MAPPING_FILE', 'jira_glpi_mapping.json'))
+script_dir = os.path.dirname(os.path.abspath(__file__))
+state_file_name = config.get('migration', {}).get('state_file', config.get('STATE_FILE', 'migration_state.json'))
+mapping_file_name = config.get('migration', {}).get('mapping_file', config.get('MAPPING_FILE', 'jira_glpi_mapping.json'))
+
+STATE_FILE = os.path.join(script_dir, state_file_name) if not os.path.isabs(state_file_name) else state_file_name
+MAPPING_FILE = os.path.join(script_dir, mapping_file_name) if not os.path.isabs(mapping_file_name) else mapping_file_name
 
 
 def load_mapping(log_func=None):
@@ -160,7 +168,11 @@ def format_description(issue, fields):
             custom_fields_html += f"<p><b>{label}:</b> {display_value}</p>"
 
     # Section 1: Header
-    content_html = f"<p><b>Original Jira Key:</b> {key}</p>"
+    jira_url = config.get('jira', {}).get('url', '')
+    if jira_url:
+        content_html = f"<p><b>Original Jira Key:</b> <a href=\"{jira_url}/browse/{key}\">{key}</a></p>"
+    else:
+        content_html = f"<p><b>Original Jira Key:</b> {key}</p>"
 
     # Section 2: People
     content_html += "<hr>"
@@ -422,6 +434,14 @@ def main():
     jira_verify_ssl = config.get('jira', {}).get('verify_ssl', config.get('JIRA_VERIFY_SSL', False))
     jira_project_key = config.get('jira', {}).get('project_key', config.get('JIRA_PROJECT_KEY', ''))
     jira_jql = config.get('jira', {}).get('jql', config.get('JIRA_JQL', f'project = {jira_project_key} ORDER BY key ASC'))
+    
+    batch_size = config.get('migration', {}).get('batch_size', config.get('BATCH_SIZE', 50))
+    debug_mode = config.get('migration', {}).get('debug', config.get('DEBUG', False))
+    debug_ticket = config.get('migration', {}).get('debug_ticket', '')
+
+    if debug_mode and debug_ticket:
+        jira_jql = f'issue = {debug_ticket}'
+
 
     glpi_url = config.get('glpi', {}).get('url', config.get('GLPI_URL', ''))
     glpi_app_token = config.get('glpi', {}).get('app_token', config.get('GLPI_APP_TOKEN', ''))
@@ -430,9 +450,15 @@ def main():
     glpi_password = config.get('glpi', {}).get('password', config.get('GLPI_PASSWORD'))
     glpi_verify_ssl = config.get('glpi', {}).get('verify_ssl', config.get('GLPI_VERIFY_SSL', False))
     glpi_project_name = config.get('glpi', {}).get('project_name', config.get('GLPI_PROJECT_NAME', ''))
+    routing_mode = config.get('glpi', {}).get('routing_mode', 'single')
+    if routing_mode not in ('single', 'split_by_status'):
+        log(f"[ERROR] Invalid routing_mode '{routing_mode}'. Must be 'single' or 'split_by_status'.", "error")
+        log_timing()
+        return
+    archived_project_name = config.get('glpi', {}).get('archived_project_name', '')
+    archived_statuses = [str(s).lower() for s in config.get('glpi', {}).get('archived_statuses', [])]
 
-    batch_size = config.get('migration', {}).get('batch_size', config.get('BATCH_SIZE', 50))
-    debug_mode = config.get('migration', {}).get('debug', config.get('DEBUG', False))
+
 
     # 1. Init Connections
     try:
@@ -463,6 +489,28 @@ def main():
             return
         log(f"✓ Found Project ID: {project_id}\n")
 
+        # Resolve Archived Project ID (if split_by_status mode)
+        archived_project_id = None
+        if routing_mode == 'split_by_status':
+            if not archived_project_name:
+                log("[ERROR] routing_mode is 'split_by_status' but 'archived_project_name' is not configured!", "error")
+                log_timing()
+                return
+            if archived_project_name == glpi_project_name:
+                log("[WARN] 'archived_project_name' is the same as 'project_name' — routing will have no effect.", "warning")
+            if not archived_statuses:
+                log("[ERROR] routing_mode is 'split_by_status' but 'archived_statuses' list is empty!", "error")
+                log_timing()
+                return
+            log(f"Resolving GLPI Archived Project '{archived_project_name}'...")
+            archived_project_id = glpi.get_project_id_by_name(archived_project_name)
+            if not archived_project_id:
+                log(f"[ERROR] Archived Project '{archived_project_name}' not found!", "error")
+                log_timing()
+                return
+            log(f"✓ Found Archived Project ID: {archived_project_id}")
+            log(f"  Archived statuses: {archived_statuses}\n")
+
         # --- PROACTIVE PREPARATION ---
         # Run preparation only if state file doesn't exist (First Run)
         if not os.path.exists(STATE_FILE):
@@ -485,9 +533,18 @@ def main():
 
     # 2. Migration Loop
     state_manager = StateManager(STATE_FILE)
-    state = state_manager.load()
-    start_at = state.get("start_at", 0)
-    total_processed = state.get("total_processed", 0)
+    if debug_ticket:
+        log("[DEBUG] Single ticket mode (debug_ticket) active. Ignoring previous migration state.")
+        start_at = 0
+        total_processed = 0
+        # Prevent overwriting the real migration state
+        state_manager.save = lambda *args, **kwargs: None
+    else:
+        state = state_manager.load()
+        start_at = state.get("start_at", 0)
+        total_processed = state.get("total_processed", 0)
+    routed_to_main = 0
+    routed_to_archived = 0
 
     # Store Jira Key -> GLPI Project Task ID for Parent-Child linking
     jira_map = load_mapping(log_func=log)
@@ -555,6 +612,16 @@ def main():
                 # Status Mapping (Dynamic & Case-Insensitive)
                 jira_status = (fields.get('status') or {}).get('name', 'Open')
                 jira_status_lower = jira_status.lower()
+
+                # Determine target project based on routing mode
+                if routing_mode == 'split_by_status' and jira_status_lower in archived_statuses:
+                    target_project_id = archived_project_id
+                    routed_to_archived += 1
+                    log(f"    → Routing to Archived project (status: {jira_status})")
+                else:
+                    target_project_id = project_id
+                    routed_to_main += 1
+
                 glpi_state_id = project_states_map.get(jira_status_lower)
 
                 if not glpi_state_id:
@@ -585,6 +652,8 @@ def main():
 
                 # Attachments
                 attachments = fields.get('attachment', [])
+                attachment_replacements = {}
+                uploaded_doc_ids = []
                 if attachments:
                     content_html += "<hr><h3>Attachments</h3><ul>"
                     for att in attachments:
@@ -595,6 +664,17 @@ def main():
                         file_data = jira.get_attachment_content(content_url)
                         if file_data:
                             temp_path = os.path.join(os.getcwd(), filename)
+                            
+                            # Magic bytes check to fix GLPI 'Invalid file type' rejection
+                            if file_data.startswith(b'\xff\xd8\xff') and not filename.lower().endswith(('.jpg', '.jpeg')):
+                                temp_path += '.jpg'
+                            elif file_data.startswith(b'\x89PNG\r\n\x1a\n') and not filename.lower().endswith('.png'):
+                                temp_path += '.png'
+                            elif (file_data.startswith(b'GIF87a') or file_data.startswith(b'GIF89a')) and not filename.lower().endswith('.gif'):
+                                temp_path += '.gif'
+                            elif file_data.startswith(b'%PDF-') and not filename.lower().endswith('.pdf'):
+                                temp_path += '.pdf'
+
                             with open(temp_path, 'wb') as f:
                                 f.write(file_data)
 
@@ -604,13 +684,26 @@ def main():
                                 os.remove(temp_path)
 
                             if doc_id:
+                                uploaded_doc_ids.append(doc_id)
                                 doc_url = f"/front/document.send.php?docid={doc_id}"
                                 content_html += f"<li><a href='{doc_url}' target='_blank'>{filename}</a></li>"
+                                attachment_replacements[filename] = doc_url
                             else:
                                 content_html += f"<li>{filename} (Upload Failed)</li>"
                         else:
                             content_html += f"<li>{filename} (Download Failed)</li>"
                     content_html += "</ul>"
+
+                if attachment_replacements:
+                    for filename, doc_url in attachment_replacements.items():
+                        escaped_filename = re.escape(filename)
+                        is_image = filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'))
+                        if is_image:
+                            replacement = f'<br><img src="{doc_url}" alt="{filename}" style="max-width: 100%;"><br>'
+                        else:
+                            replacement = f'<a href="{doc_url}" target="_blank">{filename}</a>'
+                        content_html = re.sub(r'!' + escaped_filename + r'(?:\|[^!]*)?!', replacement, content_html)
+                        content_html = re.sub(r'\[\^?' + escaped_filename + r'(?:\|[^\]]*)?\]', replacement, content_html)
 
                 # Create GLPI Project Task
                 task_name = summary
@@ -625,9 +718,7 @@ def main():
                 task_kwargs = {
                     "projectstates_id": glpi_state_id,
                     "percent_done": 100 if jira_status_lower in ['resolved', 'closed', 'done'] else 0,
-                    "urgency": urgency_val,
-                    "real_start_date": "NULL",  # string literal NULL to force unset
-                    "real_end_date": "NULL"
+                    "urgency": urgency_val
                 }
                 # map Jira Created -> GLPI 'date'
                 if glpi_date:
@@ -654,17 +745,25 @@ def main():
                         parent_glpi_id = jira_map.get(parent_key)
                         if parent_glpi_id:
                             log(f"    → Linking as child of {parent_key} (GLPI ID: {parent_glpi_id})")
+                            if routing_mode == 'split_by_status' and target_project_id != project_id:
+                                log(f"    [WARN] Cross-project link: child in archived project, parent {parent_key} may be in main project", "warning")
                             task_kwargs['projecttasks_id'] = parent_glpi_id
                         else:
                             log(f"    [WARN] Parent {parent_key} not found in current map (maybe not processed yet?)", "warning")
 
-                task_id = glpi.create_project_task(project_id, task_name, content_html, **task_kwargs)
+                task_id = glpi.create_project_task(target_project_id, task_name, content_html, **task_kwargs)
 
                 if task_id:
                     log(f"    ✓ Created Project Task ID: {task_id}")
 
                     # Store in Map for children
                     jira_map[key] = task_id
+
+                    # Link Attachments to the Task
+                    if uploaded_doc_ids:
+                        log(f"    - Linking {len(uploaded_doc_ids)} attachments to Task...")
+                        for doc_id in uploaded_doc_ids:
+                            glpi.link_document_to_item(task_id, doc_id, itemtype="ProjectTask")
 
                     # Add to Task Team
                     if assignee_id:
@@ -679,7 +778,12 @@ def main():
                     history_html = process_changelog(issue, glpi, log_func=log)
                     if history_html:
                         log("    - Migrating History Log...")
-                        if not glpi.create_note("ProjectTask", task_id, history_html):
+                        hist_kw = {}
+                        if glpi_date:
+                            hist_kw['date_creation'] = glpi_date
+                            hist_kw['date_mod'] = glpi_date
+                            
+                        if not glpi.create_note("ProjectTask", task_id, history_html, **hist_kw):
                             log("      → History Note creation failed. Queueing for description append.", "warning")
                             # If note fails, we append to Description later.
                             # But here we just want to ensure it's created first.
@@ -718,11 +822,30 @@ def main():
 
                             # Build Note content (HTML)
                             note_html = f"<p><b>{author_html} added a comment - {formatted_date}</b></p>"
-                            note_html += f"<div>{body.replace(chr(10), '<br>')}</div>"
+                            note_body = body.replace(chr(10), '<br>')
+                            
+                            if 'attachment_replacements' in locals() and attachment_replacements:
+                                for filename, doc_url in attachment_replacements.items():
+                                    escaped_filename = re.escape(filename)
+                                    is_image = filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'))
+                                    if is_image:
+                                        replacement = f'<br><img src="{doc_url}" alt="{filename}" style="max-width: 100%;"><br>'
+                                    else:
+                                        replacement = f'<a href="{doc_url}" target="_blank">{filename}</a>'
+                                    note_body = re.sub(r'!' + escaped_filename + r'(?:\|[^!]*)?!', replacement, note_body)
+                                    note_body = re.sub(r'\[\^?' + escaped_filename + r'(?:\|[^\]]*)?\]', replacement, note_body)
+                            
+                            note_html += f"<div>{note_body}</div>"
 
                             kw = {}
                             if comment_author_id:
                                 kw['users_id'] = comment_author_id
+
+                            # Set the actual date of the comment for proper sorting in GLPI
+                            sql_date = parse_jira_date(created, "%Y-%m-%d %H:%M:%S")
+                            if sql_date:
+                                kw['date_creation'] = sql_date
+                                kw['date_mod'] = sql_date
 
                             # Create Note
                             glpi.create_note("ProjectTask", task_id, note_html, **kw)
@@ -758,6 +881,9 @@ def main():
         log(f"\n{'='*50}")
         log("Migration Completed Successfully!")
         log(f"Total Processed: {total_processed}")
+        if routing_mode == 'split_by_status':
+            log(f"  → Routed to Main project: {routed_to_main}")
+            log(f"  → Routed to Archived project: {routed_to_archived}")
         log(f"{'='*50}")
 
     except KeyboardInterrupt:

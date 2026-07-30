@@ -5,11 +5,13 @@ Unified library consolidating common functionality across all migration folders.
 ## Overview
 
 The `common/` library extracts and unifies code from all 3 migration folders:
+
 - **Folder 01**: Confluence to GLPI Knowledge Base
 - **Folder 02**: Jira Projects to GLPI Project Tasks
 - **Folder 03**: Jira Support Tickets to GLPI Assistance
 
 **Benefits:**
+
 - ✅ **-83% code duplication** (~1,200 lines eliminated)
 - ✅ **Single source of truth** for API clients
 - ✅ **Consistent patterns** across all migrations
@@ -20,7 +22,7 @@ The `common/` library extracts and unifies code from all 3 migration folders:
 
 ## Directory Structure
 
-```
+```text
 common/
 ├── import_ldap_playwright.py   # LDAP user import automation (Playwright)
 ├── check_missing_users.py      # Pre-migration: find Jira users missing from GLPI
@@ -48,6 +50,7 @@ common/
 **Purpose:** Unified GLPI REST API v1 client consolidating all 3 implementations (~950 lines)
 
 **Features:**
+
 - Session management (User Token + Basic Auth fallback)
 - Knowledge Base operations (from folder 01)
 - Ticket/Assistance operations (from folders 02 & 03)
@@ -56,6 +59,7 @@ common/
 - Multiple caching (users, groups, categories, locations)
 
 **Usage:**
+
 ```python
 from common.clients.glpi_client import GlpiClient
 
@@ -97,6 +101,7 @@ glpi.kill_session()
 ```
 
 **Key Methods:**
+
 ```python
 # Session
 init_session(), kill_session()
@@ -137,12 +142,14 @@ get_item_id(), get_item()
 **Purpose:** Unified Jira REST API v2 client merging implementations from folders 02 & 03 (~310 lines)
 
 **Features:**
+
 - Issue search with pagination
 - Attachment download
 - Project metadata (statuses, issue types, users)
 - Security level discovery (API + JQL fallback)
 
 **Usage:**
+
 ```python
 from common.clients.jira_client import JiraClient
 
@@ -170,6 +177,7 @@ content = jira.get_attachment_content("https://jira.example.com/attachment/12345
 ```
 
 **Key Methods:**
+
 ```python
 search_issues(jql, start_at, max_results)  # Pagination support
 search_issues_lightweight(jql, fields)     # Lightweight search (no changelog)
@@ -189,6 +197,7 @@ get_security_levels(project_key)           # Security levels (with JQL fallback)
 **Purpose:** Multi-format configuration loader with inheritance support
 
 **Features:**
+
 - **Configuration Inheritance**: Loads common config + folder-specific config and merges them
 - Auto-detects config format (config.yaml → config.yml → config.py)
 - Loads YAML configs (folder 03 style)
@@ -200,11 +209,13 @@ get_security_levels(project_key)           # Security levels (with JQL fallback)
 **Configuration Inheritance:**
 
 The loader supports a two-level configuration system:
+
 1. **Common Config** (`common/config.yaml`): Shared settings for all migrations (GLPI/Jira credentials, logging, default batch size)
 2. **Folder-Specific Config** (each folder's `config.yaml`): Project-specific settings (project keys, custom fields, mappings)
 
 **How it works:**
-```
+
+```text
 1. Load common/config.yaml (if exists)        → Base configuration
 2. Load folder-specific config.yaml           → Project settings
 3. Deep merge: folder config overrides common → Merged config
@@ -215,6 +226,7 @@ The loader supports a two-level configuration system:
 **Example structure:**
 
 `common/config.yaml` (shared):
+
 ```yaml
 glpi:
   url: "https://glpi.example.com/api.php/v1"
@@ -232,6 +244,7 @@ migration:
 ```
 
 `02_project_jira_to_glpi_project_tasks_migration/config.yaml` (specific):
+
 ```yaml
 jira:
   project_key: "MYPROJECT"          # Project-specific
@@ -245,6 +258,7 @@ glpi:
 ```
 
 **Usage:**
+
 ```python
 from common.config.loader import load_config
 
@@ -268,6 +282,7 @@ config = load_config(validate=False)
 ```
 
 **Environment Variables (Highest Priority):**
+
 ```bash
 # Jira
 export JIRA_PAT="your_personal_access_token"
@@ -284,6 +299,7 @@ export LOG_LEVEL="DEBUG"
 ```
 
 **Benefits of Configuration Inheritance:**
+
 - ✅ **DRY (Don't Repeat Yourself)**: GLPI/Jira credentials stored once in common config
 - ✅ **Single Source of Truth**: Update credentials in one place, all migrations benefit
 - ✅ **Cleaner Folder Configs**: Only project-specific settings in folder configs
@@ -293,6 +309,7 @@ export LOG_LEVEL="DEBUG"
 **Supported Formats:**
 
 **YAML (config.yaml):**
+
 ```yaml
 jira:
   url: https://jira.example.com
@@ -310,6 +327,7 @@ logging:
 ```
 
 **Python (config.py):**
+
 ```python
 # Structured approach
 CONFIG = {
@@ -337,6 +355,7 @@ GLPI_APP_TOKEN = "your_app_token"
 **Purpose:** Date parsing and formatting with UTC+7 timezone conversion
 
 **Functions:**
+
 ```python
 from common.utils.dates import parse_jira_date, format_glpi_date_friendly, format_comment_date
 
@@ -354,6 +373,7 @@ comment_date = format_comment_date("2024-01-15T16:58:30.000+0700")
 ```
 
 **Constant:**
+
 ```python
 TZ_VN = timezone(timedelta(hours=7))  # UTC+7 timezone
 ```
@@ -365,6 +385,7 @@ TZ_VN = timezone(timedelta(hours=7))  # UTC+7 timezone
 **Purpose:** Migration state persistence for resumability
 
 **Usage:**
+
 ```python
 from common.utils.state_manager import StateManager
 
@@ -389,6 +410,7 @@ state.delete()
 ```
 
 **Backward Compatible Functions:**
+
 ```python
 from common.utils.state_manager import load_state, save_state
 
@@ -397,6 +419,7 @@ save_state('migration_state.json', start_at=100, total_processed=100)
 ```
 
 **State File Format (JSON):**
+
 ```json
 {
   "start_at": 150,
@@ -412,6 +435,7 @@ save_state('migration_state.json', start_at=100, total_processed=100)
 **Purpose:** Track missing users during migration
 
 **Usage:**
+
 ```python
 from common.tracking.user_tracker import UserTracker
 
@@ -432,7 +456,8 @@ tracker.save_report('missing_users.txt')
 ```
 
 **Report Format (TSV):**
-```
+
+```text
 Login Name      Full Name
 john.doe        John Doe
 jane.smith      jane.smith
@@ -445,6 +470,7 @@ jane.smith      jane.smith
 **Purpose:** Structured logging with console and file output
 
 **Usage:**
+
 ```python
 from common.logging.logger import setup_logger, MigrationLogger
 
@@ -463,6 +489,7 @@ child_logger.debug("Extracting fields...")
 ```
 
 **Configuration:**
+
 ```yaml
 logging:
   level: INFO                            # DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -473,6 +500,7 @@ logging:
 ```
 
 **Log Levels:**
+
 - **DEBUG**: Field extraction details, mapping logic
 - **INFO**: Processing start/end, batch progress
 - **WARNING**: Missing users, fallback mappings
@@ -480,7 +508,8 @@ logging:
 - **CRITICAL**: Fatal errors that stop migration
 
 **Output Example:**
-```
+
+```text
 2024-01-15 10:30:00 [INFO] migration: Migration started
 2024-01-15 10:30:01 [INFO] migration: Loaded 1500 users into cache
 2024-01-15 10:30:05 [WARNING] migration: Missing user: john.doe (John Doe)
@@ -579,16 +608,19 @@ finally:
 The common library maintains backward compatibility with existing migration scripts:
 
 ### Folder 03 (Already Modular)
+
 - **Current**: Uses `lib/` folder structure
 - **Migration**: Update imports to use `common.*` instead of `lib.*`
 - **Risk**: Low (minimal changes)
 
 ### Folder 02 (Python Config)
+
 - **Current**: Uses `config.py` Python module
 - **Migration**: ConfigLoader auto-detects and loads Python configs
 - **Risk**: Medium (80+ custom field mappings)
 
 ### Folder 01 (Simple Script)
+
 - **Current**: Uses `config.py` Python module
 - **Migration**: ConfigLoader auto-detects and loads Python configs
 - **Risk**: Low (simpler script)
@@ -598,7 +630,8 @@ The common library maintains backward compatibility with existing migration scri
 ## Testing
 
 ### Unit Tests (Planned)
-```
+
+```text
 common/tests/
 ├── test_glpi_client.py
 ├── test_jira_client.py
@@ -609,6 +642,7 @@ common/tests/
 ```
 
 ### Integration Tests (Planned)
+
 - Mock API responses
 - Test each migration script with test data
 - Verify output matches legacy implementation
@@ -685,6 +719,7 @@ The `check_missing_users.py` script identifies Jira users that do not exist in G
 ### Why Run This?
 
 Migrations assign tickets/tasks to users by matching Jira login names to GLPI users. If a user is missing from GLPI, the migration cannot assign the ticket correctly. Running this script first lets you:
+
 - Import missing users via LDAP before migration
 - Understand why certain users are missing (deleted from AD, disabled, etc.)
 - Decide how to handle each case
@@ -744,7 +779,7 @@ python check_missing_users.py PROJ1 -o report.txt --batch-size 50
 The output is a tab-separated file with 5 columns:
 
 ```
-Login Name	Jira Key	Full Name	Reason	Related Tickets
+Login Name Jira Key Full Name Reason Related Tickets
 ```
 
 | Column | Description |
@@ -836,6 +871,7 @@ If GLPI shows significantly fewer users than expected after LDAP import, the mos
 ```
 
 This filter:
+
 - `objectClass=user` + `objectCategory=person` — selects real user accounts (excludes computers, groups)
 
 > **Note on disabled accounts:** Do NOT add `(!(userAccountControl:1.2.840.113556.1.4.803:=2))` to exclude disabled users if you are migrating data from external systems (e.g., Jira). Disabled users may still be assigned to tickets/tasks and must exist in GLPI for user matching to work correctly during migration.
@@ -897,6 +933,7 @@ After applying the configuration:
 ## Contributing
 
 When adding new features:
+
 1. Keep modules focused and single-purpose
 2. Maintain backward compatibility where possible
 3. Add docstrings with examples
@@ -913,6 +950,7 @@ Internal use only for IT-Agent migration project.
 ## Support
 
 For questions or issues:
+
 1. Check this README
 2. Check individual module docstrings
 3. Check migration folder USER_GUIDE.md files

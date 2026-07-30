@@ -3,24 +3,33 @@
 
 # GLPI Configuration (Shared)
 glpi:
-  url: "https://your-glpi-server.com/api.php/v1"
+  url: "https://your-glpi-server.com/apirest.php"
   app_token: "YOUR_GLPI_APP_TOKEN"
   user_token: "YOUR_GLPI_USER_TOKEN"
   email: "YOUR_GLPI_EMAIL" # to test connection by test_curl.py
   username: "your_username"  # Optional: for Basic Auth fallback
   password: "your_password"  # Optional: for Basic Auth fallback
   verify_ssl: "path_to_ssl_certificate"  # Path to SSL certificate, or false to disable
+  link_patterns:
+    Ticket: "{glpi_base_url}/front/ticket.form.php?id={glpi_id}"
+    ProjectTask: "{glpi_base_url}/front/projecttask.form.php?id={glpi_id}"
 
 # Jira Configuration (Shared)
 jira:
   url: "https://your-jira-server.com"
   pat: "YOUR_JIRA_PERSONAL_ACCESS_TOKEN"
   verify_ssl: true  # Or path to certificate, or false to disable
+  link_patterns:
+    - "{jira_url}/secure/RapidBoard.jspa?.*?selectedIssue={jira_key}.*"
+    - "{jira_url}/browse/{jira_key}"
+    - "{jira_url}/projects/.*/issues/{jira_key}.*"
 
 # Migration Settings (Shared Defaults)
 migration:
   batch_size: 50  # Number of items to fetch per API request
   debug: false    # Set to true to process only 1 batch (folder 01: pages, folder 02/03: tickets)
+  debug_ticket: "" # Specific Jira ticket ID to migrate when in debug mode
+  debug_item_id: "" # Specific DB item ID to migrate for asset migration
 
 # Logging Configuration (Shared)
 logging:

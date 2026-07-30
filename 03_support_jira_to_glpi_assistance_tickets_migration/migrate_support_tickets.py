@@ -3,7 +3,11 @@ Jira to GLPI Migration Script - Refactored Version 2.0
 Migrates support tickets from Jira to GLPI Assistance with resumable state
 """
 import os
+import sys
 import time
+
+# Add root directory to sys.path to resolve 'common' module
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import from shared library
 from common.config.loader import load_config
@@ -12,6 +16,7 @@ from common.tracking.user_tracker import UserTracker
 from common.clients.jira_client import JiraClient
 from common.clients.glpi_client import GlpiClient
 from common.utils.state_manager import StateManager
+from common.utils.mapping_manager import IdMappingManager
 
 # Import local lib modules (domain-specific logic)
 from lib.field_extractor import (
@@ -289,11 +294,16 @@ def main():
 
         # Load state
         state_file = migration_config.get('state_file', 'migration_state.json')
-        state = load_state(state_file)
+        state_file_path = os.path.join(os.path.dirname(__file__), state_file) if not os.path.isabs(state_file) else state_file
+        state = load_state(state_file_path)
         start_at = state["start_at"]
         total_processed = state["total_processed"]
 
         logger.info(f"Resuming from offset {start_at}, {total_processed} processed so far")
+
+        # Load ID mapping manager
+        map_file = migration_config.get('mapping_file', 'jira_glpi_id_map.json')
+        mapping_manager = IdMappingManager(os.path.join(os.path.dirname(__file__), map_file))
 
         # Debug mode configuration
         debug_enabled = migration_config.get('debug', False)
@@ -304,10 +314,18 @@ def main():
         # Main migration loop
         batch_size = migration_config.get('batch_size', 50)
         project_key = jira_config.get('project_key')
+        debug_ticket = migration_config.get('debug_ticket')
+        
+        if debug_ticket:
+            start_at = 0
+            logger.info(f"[DEBUG TICKET MODE] Will strictly migrate {debug_ticket}")
 
         while True:
             # Build JQL query
-            jql = f"project = {project_key} ORDER BY key ASC"
+            if debug_ticket:
+                jql = f"project = {project_key} AND key = '{debug_ticket}'"
+            else:
+                jql = f"project = {project_key} ORDER BY key ASC"
 
             # Fetch issues from Jira
             logger.info(f"Fetching issues (offset: {start_at}, limit: {batch_size})...")
@@ -322,13 +340,15 @@ def main():
             # Process each issue
             for issue in issues:
                 try:
-                    process_issue(jira, glpi, issue, status_mapping, config, logger, user_tracker)
+                    ticket_id = process_issue(jira, glpi, issue, status_mapping, config, logger, user_tracker)
+                    if ticket_id:
+                        mapping_manager.add_mapping(issue['key'], ticket_id)
                     total_processed += 1
 
                     # Debug mode: process 1 batch and exit
                     if debug_enabled:
                         logger.info("[DEBUG] Processed 1 issue. Exiting.")
-                        save_state(state_file, start_at + 1, total_processed)
+                        save_state(state_file_path, start_at + 1, total_processed)
                         return
 
                 except Exception as e:
@@ -336,7 +356,7 @@ def main():
 
             # Update state
             start_at += len(issues)
-            save_state(state_file, start_at, total_processed)
+            save_state(state_file_path, start_at, total_processed)
             logger.info(f"State saved. Next batch at offset {start_at}")
 
         # Migration complete
@@ -349,7 +369,8 @@ def main():
     finally:
         # Save missing users report
         missing_users_file = migration_config.get('missing_users_file', 'missing_users.txt')
-        user_tracker.save_report(missing_users_file)
+        missing_users_file_path = os.path.join(os.path.dirname(__file__), missing_users_file) if not os.path.isabs(missing_users_file) else missing_users_file
+        user_tracker.save_report(missing_users_file_path)
 
         # Kill GLPI session
         try:
